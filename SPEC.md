@@ -93,6 +93,57 @@ La app corre siempre en local (tu máquina), pero gestiona N proyectos a la vez 
 - Métricas simples: tiempo de vida medio de un worktree, nº de worktrees activos a lo largo del tiempo.
 - Auto-arranque del dashboard como servicio en segundo plano (launchd/systemd) al iniciar sesión.
 
-## 7. Estado del documento
+## 7. Fases de desarrollo (Roadmap)
 
-- v0.1 — alcance inicial y decisiones de arquitectura acordadas. Pendiente de desglosar en fases/tareas concretas en Notion.
+### Fase 1 — Scaffolding
+
+- Monorepo (frontend + backend)
+- Vite + React + TypeScript
+- Fastify + Socket.io (base)
+- ESLint / Prettier
+- Registro central `~/.worktrees-manager/` (SQLite)
+
+### Fase 2 — Modelo de datos y persistencia
+
+- Esquema SQLite: Project, Worktree, LogEntry
+- Migraciones
+
+### Fase 3 — Gestión de proyectos
+
+- CRUD de proyectos desde la UI
+- Lectura/escritura de `.worktrees-manager.json`
+- Alta de proyecto (autorelleno si el fichero existe, creación si no)
+
+### Fase 4 — Ciclo de vida de worktrees
+
+- Crear worktree (`main`, rama concreta o rama actual)
+- Asignación automática de puerto libre
+- Borrar worktree (con confirmación)
+- Listado de worktrees por proyecto
+
+### Fase 5 — Entornos de desarrollo y logs
+
+- Arranque / parada del proceso de dev
+- Streaming de logs en tiempo real (WebSockets)
+- Estado visual: parado / arrancando / corriendo / error
+
+### Fase 6 — Estado de cambios sin commitear
+
+- Polling de `git status --porcelain`
+- Resumen de ficheros modificados / nuevos / borrados
+
+### Fase 7 — Integración con Pull Requests
+
+- Asociación manual (o por nombre de rama) con `gh` CLI
+- Estado: abierta / cerrada / mergeada, checks de CI
+- Enlace directo a GitHub
+
+### Fase 8 — Distribución
+
+- Paquete npm ejecutable (`npx worktrees-manager`)
+- Instalación global (`npm i -g`)
+
+## 8. Estado del documento
+
+- v0.1 — alcance inicial y decisiones de arquitectura acordadas.
+- Desglose en fases (sección 7) añadido — pendiente de reflejar en Notion.
