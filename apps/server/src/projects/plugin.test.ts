@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../app.js";
 import { runMigrations } from "../db/migrate.js";
 import { readProjectConfigFile } from "./config-file.js";
+import { buildCreateProjectInput } from "./test-fixtures.js";
 
 function initGitRepoDir(): string {
   const repoPath = mkdtempSync(join(tmpdir(), "worktrees-manager-plugin-"));
@@ -32,13 +33,6 @@ function createGitRepoDir(): string {
 
   return repoPath;
 }
-
-const SAMPLE_PROJECT_FIELDS = {
-  name: "worktrees-manager",
-  devCommand: "pnpm dev",
-  portRangeStart: 3000,
-  portRangeEnd: 3099,
-};
 
 describe("projects plugin", () => {
   let db: Database.Database;
@@ -93,6 +87,19 @@ describe("projects plugin", () => {
     });
   });
 
+  it("should report configFile=null instead of failing when the config file is corrupt", async () => {
+    const repoPath = trackRepoPath();
+    writeFileSync(join(repoPath, ".worktrees-manager.json"), "{ not valid json");
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/lookup?localPath=${repoPath}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ configFile: null });
+  });
+
   it("should report hasCommits=false when looking up a git repo without any commit", async () => {
     const repoPath = initGitRepoDir();
     repoPaths.push(repoPath);
@@ -107,19 +114,16 @@ describe("projects plugin", () => {
 
   it("should create a project and write the config file when the path is a valid git repo", async () => {
     const repoPath = trackRepoPath();
+    const input = buildCreateProjectInput({ localPath: repoPath });
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/projects",
-      payload: { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath },
-    });
+    const response = await app.inject({ method: "POST", url: "/api/projects", payload: input });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toMatchObject({ name: "worktrees-manager", localPath: repoPath });
+    expect(response.json()).toMatchObject({ name: input.name, localPath: repoPath });
     expect(readProjectConfigFile(repoPath)).toEqual({
-      devCommand: "pnpm dev",
-      portRangeStart: 3000,
-      portRangeEnd: 3099,
+      devCommand: input.devCommand,
+      portRangeStart: input.portRangeStart,
+      portRangeEnd: input.portRangeEnd,
     });
   });
 
@@ -130,7 +134,7 @@ describe("projects plugin", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: { ...SAMPLE_PROJECT_FIELDS, name: "not-a-repo", localPath: repoPath },
+      payload: buildCreateProjectInput({ localPath: repoPath }),
     });
 
     expect(response.statusCode).toBe(422);
@@ -143,7 +147,7 @@ describe("projects plugin", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: { ...SAMPLE_PROJECT_FIELDS, name: "no-commits", localPath: repoPath },
+      payload: buildCreateProjectInput({ localPath: repoPath }),
     });
 
     expect(response.statusCode).toBe(422);
@@ -161,7 +165,7 @@ describe("projects plugin", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: { ...SAMPLE_PROJECT_FIELDS, name: "no-write-permission", localPath: repoPath },
+      payload: buildCreateProjectInput({ localPath: repoPath }),
     });
 
     expect(response.statusCode).toBe(422);
@@ -185,7 +189,7 @@ describe("projects plugin", () => {
 
   it("should reject creating a project with a local path already registered by another project", async () => {
     const repoPath = trackRepoPath();
-    const projectInput = { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath };
+    const projectInput = buildCreateProjectInput({ localPath: repoPath });
 
     await app.inject({ method: "POST", url: "/api/projects", payload: projectInput });
     const response = await app.inject({
@@ -202,7 +206,7 @@ describe("projects plugin", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath },
+      payload: buildCreateProjectInput({ localPath: repoPath }),
     });
     const created = createResponse.json();
 
@@ -215,6 +219,24 @@ describe("projects plugin", () => {
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json()).toMatchObject({ devCommand: "npm start" });
     expect(readProjectConfigFile(repoPath)).toMatchObject({ devCommand: "npm start" });
+  });
+
+  it("should reject updating only one port bound without the other", async () => {
+    const repoPath = trackRepoPath();
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({ localPath: repoPath }),
+    });
+    const created = createResponse.json();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${created.id}`,
+      payload: { portRangeStart: 9000 },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   it("should return 404 when updating a project id that does not exist", async () => {
@@ -232,7 +254,7 @@ describe("projects plugin", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath },
+      payload: buildCreateProjectInput({ localPath: repoPath }),
     });
     const created = createResponse.json();
 

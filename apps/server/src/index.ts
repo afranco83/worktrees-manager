@@ -5,9 +5,13 @@ import { openRegistry } from "./registry.js";
 
 const PORT = Number(process.env.PORT ?? 4100);
 
+// Referencia al app ya construido, solo para poder loguear con el logger estructurado
+// de Fastify (Pino) si el arranque falla después de construirlo — ver el catch de abajo.
+let app: ReturnType<typeof buildApp> | undefined;
+
 async function start(): Promise<void> {
   const registry = openRegistry();
-  const app = buildApp(registry);
+  app = buildApp(registry);
 
   app.addHook("onClose", async () => {
     registry.close();
@@ -20,11 +24,16 @@ async function start(): Promise<void> {
   });
 
   io.on("connection", (socket) => {
-    app.log.info({ socketId: socket.id }, "cliente conectado por WebSocket");
+    app?.log.info({ socketId: socket.id }, "cliente conectado por WebSocket");
   });
 }
 
 start().catch((error: unknown) => {
-  console.error(error);
+  if (app) {
+    app.log.error(error);
+  } else {
+    console.error(error);
+  }
+
   process.exit(1);
 });

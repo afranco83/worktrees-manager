@@ -33,13 +33,19 @@ export function listDirectories(requestedPath?: string): DirectoryListing {
     );
   }
 
-  const directories = readdirSync(resolvedPath)
-    .filter((name) => !name.startsWith("."))
-    .flatMap((name) => {
-      const entryPath = join(resolvedPath, name);
+  const directories = readdirSync(resolvedPath, { withFileTypes: true })
+    .filter((entry) => !entry.name.startsWith("."))
+    .flatMap((entry) => {
+      const entryPath = join(resolvedPath, entry.name);
 
       try {
-        return statSync(entryPath).isDirectory() ? [{ name, path: entryPath }] : [];
+        // Dirent.isDirectory() no sigue symlinks: solo hace falta el statSync (que sí los
+        // sigue) para las entradas que son enlaces, evitando una syscall extra por entrada.
+        const isDirectory = entry.isSymbolicLink()
+          ? statSync(entryPath).isDirectory()
+          : entry.isDirectory();
+
+        return isDirectory ? [{ name: entry.name, path: entryPath }] : [];
       } catch {
         // Enlace roto o sin permisos de lectura: se omite en vez de romper el listado completo.
         return [];

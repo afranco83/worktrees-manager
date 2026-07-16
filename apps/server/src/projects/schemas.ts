@@ -15,6 +15,7 @@ export const projectSchema = z.object({
 export type Project = z.infer<typeof projectSchema>;
 
 const PORT_RANGE_MESSAGE = "portRangeStart debe ser menor que portRangeEnd";
+const PORT_RANGE_TOGETHER_MESSAGE = "portRangeStart y portRangeEnd deben enviarse juntos";
 
 export const createProjectSchema = z
   .object({
@@ -39,6 +40,10 @@ export const updateProjectSchema = z
     portRangeEnd: z.number().int().positive(),
   })
   .partial()
+  .refine((value) => (value.portRangeStart == null) === (value.portRangeEnd == null), {
+    message: PORT_RANGE_TOGETHER_MESSAGE,
+    path: ["portRangeEnd"],
+  })
   .refine(
     (value) =>
       value.portRangeStart == null ||

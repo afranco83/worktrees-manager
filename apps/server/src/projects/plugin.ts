@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { InvalidProjectPathError } from "../errors.js";
+import { InvalidProjectConfigFileError, InvalidProjectPathError } from "../errors.js";
 import { readProjectConfigFile, writeProjectConfigFile } from "./config-file.js";
 import { inspectRepoPath } from "./repo-path.js";
 import {
@@ -19,6 +19,23 @@ import {
   projectSchema,
   updateProjectSchema,
 } from "./schemas.js";
+
+/**
+ * Un `.worktrees-manager.json` corrupto no debe tumbar todo el lookup: se trata como
+ * "sin config file" para que el usuario pueda seguir dando de alta el proyecto y
+ * la app lo regenere al guardar (ver POST/PATCH, que siempre reescriben el fichero).
+ */
+function tryReadProjectConfigFile(localPath: string): ReturnType<typeof readProjectConfigFile> {
+  try {
+    return readProjectConfigFile(localPath);
+  } catch (error) {
+    if (error instanceof InvalidProjectConfigFileError) {
+      return null;
+    }
+
+    throw error;
+  }
+}
 
 export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get("/", { schema: { response: { 200: z.array(projectSchema) } } }, async () =>
@@ -45,7 +62,7 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
         hasCommits,
         isWritable,
         existingProjectId: existingProject?.id ?? null,
-        configFile: exists ? readProjectConfigFile(localPath) : null,
+        configFile: exists ? tryReadProjectConfigFile(localPath) : null,
       };
     },
   );

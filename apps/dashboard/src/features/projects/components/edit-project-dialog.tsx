@@ -115,8 +115,14 @@ export function EditProjectDialog({
                 id="edit-portRangeStart"
                 type="number"
                 aria-invalid={errors.portRangeStart != null}
+                aria-describedby={errors.portRangeStart ? "edit-portRangeStart-error" : undefined}
                 {...register("portRangeStart")}
               />
+              {errors.portRangeStart && (
+                <p id="edit-portRangeStart-error" className="text-sm text-destructive">
+                  {errors.portRangeStart.message}
+                </p>
+              )}
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="edit-portRangeEnd">Puerto final</Label>

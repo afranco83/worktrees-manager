@@ -11,22 +11,16 @@ import {
   listProjects,
   updateProject,
 } from "./repository.js";
-import type { CreateProjectInput } from "./schemas.js";
-
-const SAMPLE_PROJECT_INPUT: CreateProjectInput = {
-  localPath: "/repos/worktrees-manager",
-  name: "worktrees-manager",
-  devCommand: "pnpm dev",
-  portRangeStart: 3000,
-  portRangeEnd: 3099,
-};
+import { buildCreateProjectInput } from "./test-fixtures.js";
 
 describe("projects repository", () => {
   let db: Database.Database;
+  let sampleProjectInput: ReturnType<typeof buildCreateProjectInput>;
 
   beforeEach(() => {
     db = new Database(":memory:");
     runMigrations(db);
+    sampleProjectInput = buildCreateProjectInput();
   });
 
   it("should return an empty list when no project has been inserted", () => {
@@ -34,7 +28,7 @@ describe("projects repository", () => {
   });
 
   it("should return the inserted project when listed and fetched by id", () => {
-    const created = insertProject(db, SAMPLE_PROJECT_INPUT);
+    const created = insertProject(db, sampleProjectInput);
 
     expect(listProjects(db)).toEqual([created]);
     expect(getProjectById(db, created.id)).toEqual(created);
@@ -45,22 +39,22 @@ describe("projects repository", () => {
   });
 
   it("should find a project by its local path", () => {
-    const created = insertProject(db, SAMPLE_PROJECT_INPUT);
+    const created = insertProject(db, sampleProjectInput);
 
-    expect(findProjectByLocalPath(db, SAMPLE_PROJECT_INPUT.localPath)).toEqual(created);
+    expect(findProjectByLocalPath(db, sampleProjectInput.localPath)).toEqual(created);
     expect(findProjectByLocalPath(db, "/repos/does-not-exist")).toBeNull();
   });
 
   it("should throw DuplicateProjectPathError when inserting a project with an already-registered local path", () => {
-    insertProject(db, SAMPLE_PROJECT_INPUT);
+    insertProject(db, sampleProjectInput);
 
-    expect(() => insertProject(db, { ...SAMPLE_PROJECT_INPUT, name: "otro-nombre" })).toThrow(
+    expect(() => insertProject(db, { ...sampleProjectInput, name: "otro-nombre" })).toThrow(
       DuplicateProjectPathError,
     );
   });
 
   it("should update only the patched fields when updating an existing project", () => {
-    const created = insertProject(db, SAMPLE_PROJECT_INPUT);
+    const created = insertProject(db, sampleProjectInput);
 
     const updated = updateProject(db, { id: created.id, patch: { name: "nuevo-nombre" } });
 
@@ -75,7 +69,7 @@ describe("projects repository", () => {
   });
 
   it("should remove the project when deleting an existing id", () => {
-    const created = insertProject(db, SAMPLE_PROJECT_INPUT);
+    const created = insertProject(db, sampleProjectInput);
 
     deleteProject(db, created.id);
 

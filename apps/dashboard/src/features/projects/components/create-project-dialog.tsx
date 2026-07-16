@@ -35,7 +35,7 @@ function basenameOf(localPath: string): string {
 
 type DialogStep = "form" | "browse";
 
-type PathIssue = "not-git-repo" | "no-commits" | "not-writable";
+type PathIssue = "not-git-repo" | "no-commits" | "not-writable" | "lookup-failed";
 
 const PATH_ISSUE_MESSAGES: Record<PathIssue, string> = {
   "not-git-repo":
@@ -44,6 +44,7 @@ const PATH_ISSUE_MESSAGES: Record<PathIssue, string> = {
     "Este repositorio no tiene ningún commit. Los worktrees necesitan al menos una rama con historial: haz un primer commit y vuelve a intentarlo.",
   "not-writable":
     "No tienes permisos de escritura sobre esta carpeta. Git necesita poder crear ahí los metadatos del worktree.",
+  "lookup-failed": "No se ha podido comprobar la ruta. Vuelve a intentarlo.",
 };
 
 function classifyPathIssue(lookup: ProjectPathLookup): PathIssue | null {
@@ -116,7 +117,14 @@ export function CreateProjectDialog({
       setValue("name", basenameOf(localPath));
     }
 
-    const lookup = await pathLookup.mutateAsync(localPath);
+    let lookup: ProjectPathLookup;
+
+    try {
+      lookup = await pathLookup.mutateAsync(localPath);
+    } catch {
+      setPathValidation({ path: localPath, issue: "lookup-failed" });
+      return;
+    }
 
     setPathValidation({ path: localPath, issue: classifyPathIssue(lookup) });
 
@@ -250,8 +258,14 @@ export function CreateProjectDialog({
                       id="portRangeStart"
                       type="number"
                       aria-invalid={errors.portRangeStart != null}
+                      aria-describedby={errors.portRangeStart ? "portRangeStart-error" : undefined}
                       {...register("portRangeStart")}
                     />
+                    {errors.portRangeStart && (
+                      <p id="portRangeStart-error" className="text-sm text-destructive">
+                        {errors.portRangeStart.message}
+                      </p>
+                    )}
                   </div>
                   <div className="grid gap-1.5">
                     <Label htmlFor="portRangeEnd">Puerto final</Label>

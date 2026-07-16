@@ -1,6 +1,24 @@
 import { http, HttpResponse } from "msw";
+import { z } from "zod";
 
 import type { Project } from "@/features/projects/schemas";
+
+const createProjectRequestSchema = z.object({
+  localPath: z.string(),
+  name: z.string(),
+  devCommand: z.string(),
+  portRangeStart: z.number(),
+  portRangeEnd: z.number(),
+});
+
+const updateProjectRequestSchema = z
+  .object({
+    name: z.string(),
+    devCommand: z.string(),
+    portRangeStart: z.number(),
+    portRangeEnd: z.number(),
+  })
+  .partial();
 
 export let projectsStore: Project[] = [];
 
@@ -20,10 +38,7 @@ export const handlers = [
   http.get("/api/projects", () => HttpResponse.json(projectsStore)),
 
   http.post("/api/projects", async ({ request }) => {
-    const body = (await request.json()) as Omit<
-      Project,
-      "id" | "createdAt" | "repoOwner" | "repoName"
-    >;
+    const body = createProjectRequestSchema.parse(await request.json());
 
     if (projectsStore.some((project) => project.localPath === body.localPath)) {
       return HttpResponse.json(
@@ -46,7 +61,7 @@ export const handlers = [
   }),
 
   http.patch("/api/projects/:id", async ({ params, request }) => {
-    const patch = (await request.json()) as Partial<Project>;
+    const patch = updateProjectRequestSchema.parse(await request.json());
     const existing = projectsStore.find((project) => project.id === params.id);
 
     if (!existing) {

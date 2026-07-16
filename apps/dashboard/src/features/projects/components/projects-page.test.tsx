@@ -1,25 +1,28 @@
+import { faker } from "@faker-js/faker";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { FAKE_HOME, resetProjectsStore } from "@/test/msw/handlers";
+import { server } from "@/test/msw/server";
 
-import type { Project } from "../schemas";
+import { projectSchema, type Project } from "../schemas";
 import { ProjectsPage } from "./projects-page";
 
-const EXISTING_PROJECT: Project = {
-  id: "8f14e45f-ceea-467e-8555-a41d712dc5a1",
-  name: "worktrees-manager",
-  localPath: "/repos/worktrees-manager",
+const EXISTING_PROJECT: Project = projectSchema.parse({
+  id: faker.string.uuid(),
+  name: faker.company.name(),
+  localPath: `/repos/${faker.helpers.slugify(faker.company.name()).toLowerCase()}`,
   devCommand: "pnpm dev",
-  portRangeStart: 3000,
-  portRangeEnd: 3099,
+  portRangeStart: faker.number.int({ min: 3000, max: 3900 }),
+  portRangeEnd: faker.number.int({ min: 4000, max: 4900 }),
   repoOwner: null,
   repoName: null,
-  createdAt: "2026-07-16T00:00:00.000Z",
-};
+  createdAt: faker.date.recent().toISOString(),
+});
 
 function renderProjectsPage(): void {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -41,8 +44,8 @@ describe("ProjectsPage", () => {
 
     renderProjectsPage();
 
-    expect(await screen.findByText("worktrees-manager")).toBeInTheDocument();
-    expect(screen.getByText("/repos/worktrees-manager")).toBeInTheDocument();
+    expect(await screen.findByText(EXISTING_PROJECT.name)).toBeInTheDocument();
+    expect(screen.getByText(EXISTING_PROJECT.localPath)).toBeInTheDocument();
   });
 
   it("should show an empty state when no project has been registered yet", async () => {
@@ -115,6 +118,26 @@ describe("ProjectsPage", () => {
     expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
   });
 
+  it("should show an error and unblock from the stuck state when the path lookup request fails", async () => {
+    server.use(
+      http.get("/api/projects/lookup", () =>
+        HttpResponse.json({ error: "Internal Server Error", message: "fallo" }, { status: 500 }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderProjectsPage();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/any-path");
+    await user.tab();
+
+    expect(await screen.findByText(/No se ha podido comprobar la ruta/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
+  });
+
   it("should fill in the local path when a folder is picked from the directory browser", async () => {
     const user = userEvent.setup();
     renderProjectsPage();
@@ -138,7 +161,7 @@ describe("ProjectsPage", () => {
     const user = userEvent.setup();
     renderProjectsPage();
 
-    await screen.findByText("worktrees-manager");
+    await screen.findByText(EXISTING_PROJECT.name);
 
     await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
     await user.type(screen.getByLabelText("Ruta local"), EXISTING_PROJECT.localPath);
