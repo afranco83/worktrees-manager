@@ -4,6 +4,6 @@ Decisiones de arquitectura individuales, formato [MADR](https://adr.github.io/ma
 
 A diferencia de otros repos propios sobre el mismo modelo documental, aquí no hay ADRs retroactivos: la carpeta arranca vacía junto con el resto de la documentación (Fase 0), antes de escribir ningún código. Cualquier decisión de arquitectura nueva y significativa (no un detalle de implementación) se documenta con un ADR en el momento en que se toma.
 
-| ADR                 | Decisión |
-| ------------------- | -------- |
-| _(ninguno todavía)_ |          |
+| ADR                                                  | Decisión                                                                                              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [0001](./0001-esquema-datos-y-migraciones-sqlite.md) | Migraciones SQLite hand-rolled + IDs UUID en `projects`/`worktrees`, autoincremental en `log_entries` |

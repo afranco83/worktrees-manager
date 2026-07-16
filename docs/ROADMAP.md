@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 1 — Scaffolding, cerrada el 2026-07-16**; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 2 — Modelo de datos y persistencia, cerrada el 2026-07-16**; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -48,16 +48,22 @@ Tareas:
 
 ---
 
-## Fase 2 — Modelo de datos y persistencia
+## Fase 2 — Modelo de datos y persistencia _(cerrada — 2026-07-16)_
 
 **Objetivo**: formalizar el esquema SQLite borrador de `ARCHITECTURE.md` §4.
 
 Tareas:
 
-- [ ] Esquema SQLite: `Project`, `Worktree`, `LogEntry`
-- [ ] Migraciones
+- [x] Esquema SQLite: `Project`, `Worktree`, `LogEntry` (tablas `projects`, `worktrees`, `log_entries`)
+- [x] Migraciones (`apps/server/src/db/migrate.ts`, runner propio — ver [ADR-0001](./adr/0001-esquema-datos-y-migraciones-sqlite.md))
 
-**DoD**: a definir al cerrar Fase 1.
+**DoD**: al arrancar `apps/server`, `~/.worktrees-manager/registry.db` tiene las tablas `projects`, `worktrees` y `log_entries` creadas, y volver a aplicar las migraciones no falla ni las duplica. **Cumplido**: la lógica de migración (creación de tablas, idempotencia, atomicidad ante un fallo a mitad) está cubierta por tests Vitest (`apps/server/src/db/migrate.test.ts`, contra una base en memoria); el enlace con el registro real (`openRegistry()` → `~/.worktrees-manager/registry.db`) se verificó manualmente.
+
+**Adenda (2026-07-16)**:
+
+- Se introduce Vitest en `apps/server` (sin DOM, per `ARCHITECTURE.md` §6) y un script `test` a nivel raíz (`pnpm -r --if-present run test`, con `--if-present` porque `apps/dashboard` no tiene tests todavía) + paso nuevo en `ci.yml`.
+- Decisiones de esquema (estrategia de migraciones, IDs UUID vs. autoincrementales) documentadas en [ADR-0001](./adr/0001-esquema-datos-y-migraciones-sqlite.md).
+- La política de retención/rotación de `log_entries` sigue sin decidir (el esquema no impone límite): se resuelve en Fase 5, cuando exista el flujo real de escritura de logs.
 
 ---
 
