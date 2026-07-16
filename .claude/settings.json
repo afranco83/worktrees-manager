@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "vite-react-ts@afai-conventions-tools": true,
+    "node-fastify@afai-conventions-tools": true
+  }
+}
