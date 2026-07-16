@@ -1,5 +1,7 @@
 {
   "enabledPlugins": {
+    "core-common@afai-conventions-tools": true,
+    "react-common@afai-conventions-tools": true,
     "vite-react-ts@afai-conventions-tools": true,
     "node-fastify@afai-conventions-tools": true
   }
