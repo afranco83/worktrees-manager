@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+allowBuilds:
+  # better-sqlite3: build nativo real, necesario (registro central en SQLite).
+  better-sqlite3: true
+  # esbuild: dependencia transitiva de vite/tsx, sin superficie nueva.
+  esbuild: true
