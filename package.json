@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r --if-present run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"

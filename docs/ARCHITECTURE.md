@@ -54,10 +54,11 @@ No hay `packages/*` compartidos en v1: `dashboard` y `server` no comparten códi
 
 - `~/.worktrees-manager/` — directorio fuera de cualquier repo gestionado, creado por `apps/server` en el primer arranque si no existe.
 - Persistencia en SQLite (`better-sqlite3`), fichero único dentro de ese directorio.
-- **Esquema de datos (borrador inicial, se formaliza en Fase 2)**:
-  - **Project**: id, nombre, ruta local, comando de arranque, rango de puertos, repo remoto (owner/name).
-  - **Worktree**: id, project_id, rama, ruta, puerto, estado del proceso, PID (si corre), PR asociada (nº), creado_en.
-  - **LogEntry**: worktree_id, timestamp, stream (stdout/stderr), contenido. Persistencia acotada (últimas N líneas o rotación por tamaño) — a decidir en Fase 2/5.
+- **Esquema de datos** (tablas `projects`, `worktrees`, `log_entries` — formalizado en Fase 2, decisiones de migraciones/IDs en [ADR-0001](./adr/0001-esquema-datos-y-migraciones-sqlite.md)):
+  - **Project**: id (UUID), nombre, ruta local, comando de arranque, rango de puertos, repo remoto (owner/name).
+  - **Worktree**: id (UUID), project_id, rama, ruta, puerto, estado del proceso, PID (si corre), PR asociada (nº), creado_en.
+  - **LogEntry**: id (autoincremental), worktree_id, timestamp, stream (stdout/stderr), contenido. Persistencia acotada (últimas N líneas o rotación por tamaño) — sigue pendiente, a decidir en Fase 5 cuando exista el flujo real de escritura de logs.
+- **Migraciones**: runner propio (`apps/server/src/db/migrate.ts`), sin librería externa — array de migraciones trackeadas en `schema_migrations`, aplicadas solo hacia delante.
 
 ## 5. Config por proyecto (`.worktrees-manager.json`)
 
