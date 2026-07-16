@@ -51,6 +51,8 @@ export const projectPathLookupSchema = z.object({
   localPath: z.string(),
   exists: z.boolean(),
   isGitRepo: z.boolean(),
+  hasCommits: z.boolean(),
+  isWritable: z.boolean(),
   existingProjectId: z.string().uuid().nullable(),
   configFile: z
     .object({

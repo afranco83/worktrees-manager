@@ -8,6 +8,14 @@ export function resetProjectsStore(initialProjects: Project[] = []): void {
   projectsStore = [...initialProjects];
 }
 
+export const FAKE_HOME = "/home/test";
+
+const FAKE_DIRECTORY_TREE: Record<string, string[]> = {
+  [FAKE_HOME]: ["projects"],
+  [`${FAKE_HOME}/projects`]: ["my-repo"],
+  [`${FAKE_HOME}/projects/my-repo`]: [],
+};
+
 export const handlers = [
   http.get("/api/projects", () => HttpResponse.json(projectsStore)),
 
@@ -72,13 +80,34 @@ export const handlers = [
   http.get("/api/projects/lookup", ({ request }) => {
     const localPath = new URL(request.url).searchParams.get("localPath") ?? "";
     const existingProject = projectsStore.find((project) => project.localPath === localPath);
+    const isGitRepo = !localPath.includes("not-a-git-repo");
 
     return HttpResponse.json({
       localPath,
-      exists: true,
-      isGitRepo: true,
+      exists: isGitRepo,
+      isGitRepo,
+      hasCommits: isGitRepo && !localPath.includes("no-commits"),
+      isWritable: !localPath.includes("not-writable"),
       existingProjectId: existingProject?.id ?? null,
       configFile: null,
+    });
+  }),
+
+  http.get("/api/filesystem/directories", ({ request }) => {
+    const path = new URL(request.url).searchParams.get("path") || FAKE_HOME;
+    const children = FAKE_DIRECTORY_TREE[path];
+
+    if (children == null) {
+      return HttpResponse.json(
+        { error: "Unprocessable Entity", message: `${path} no existe`, statusCode: 422 },
+        { status: 422 },
+      );
+    }
+
+    return HttpResponse.json({
+      path,
+      parentPath: path === FAKE_HOME ? null : path.split("/").slice(0, -1).join("/"),
+      directories: children.map((name) => ({ name, path: `${path}/${name}` })),
     });
   }),
 ];

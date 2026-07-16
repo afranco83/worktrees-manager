@@ -9,10 +9,13 @@ import {
 
 import {
   DuplicateProjectPathError,
+  ForbiddenDirectoryPathError,
+  InvalidDirectoryPathError,
   InvalidProjectConfigFileError,
   InvalidProjectPathError,
   NotFoundError,
 } from "./errors.js";
+import { filesystemPlugin } from "./filesystem/plugin.js";
 import { projectsPlugin } from "./projects/plugin.js";
 
 declare module "fastify" {
@@ -45,6 +48,7 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
   app.get("/health", async () => ({ status: "ok" }));
 
   app.register(projectsPlugin, { prefix: "/api/projects" });
+  app.register(filesystemPlugin, { prefix: "/api/filesystem/directories" });
 
   app.setErrorHandler((error, request, reply) => {
     if (hasZodFastifySchemaValidationErrors(error)) {
@@ -67,9 +71,15 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
       return;
     }
 
+    if (error instanceof ForbiddenDirectoryPathError) {
+      sendErrorResponse({ reply, statusCode: 403, error: "Forbidden", message: error.message });
+      return;
+    }
+
     if (
       error instanceof InvalidProjectPathError ||
-      error instanceof InvalidProjectConfigFileError
+      error instanceof InvalidProjectConfigFileError ||
+      error instanceof InvalidDirectoryPathError
     ) {
       sendErrorResponse({
         reply,

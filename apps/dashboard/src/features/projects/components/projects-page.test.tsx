@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { resetProjectsStore } from "@/test/msw/handlers";
+import { FAKE_HOME, resetProjectsStore } from "@/test/msw/handlers";
 
 import type { Project } from "../schemas";
 import { ProjectsPage } from "./projects-page";
@@ -60,11 +60,76 @@ describe("ProjectsPage", () => {
     await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
 
     await user.type(screen.getByLabelText("Ruta local"), "/repos/new-project");
-    await user.type(screen.getByLabelText("Comando de arranque"), "pnpm dev");
+    await user.tab();
+    await waitFor(() => expect(screen.getByLabelText("Comando de arranque")).toBeEnabled());
 
+    await user.type(screen.getByLabelText("Comando de arranque"), "pnpm dev");
     await user.click(screen.getByRole("button", { name: "Añadir proyecto" }));
 
     expect(await screen.findByText("new-project")).toBeInTheDocument();
+  });
+
+  it("should keep the rest of the form disabled until the local path is confirmed as a valid git repo", async () => {
+    const user = userEvent.setup();
+    renderProjectsPage();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
+
+    expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Añadir proyecto" })).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/not-a-git-repo");
+    await user.tab();
+
+    expect(await screen.findByText(/Esta carpeta no es un repositorio git/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Añadir proyecto" })).toBeDisabled();
+  });
+
+  it("should explain that the repo needs a commit when the git repo has none yet", async () => {
+    const user = userEvent.setup();
+    renderProjectsPage();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/no-commits-repo");
+    await user.tab();
+
+    expect(await screen.findByText(/no tiene ningún commit/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
+  });
+
+  it("should explain that the folder needs write permission when it is not writable", async () => {
+    const user = userEvent.setup();
+    renderProjectsPage();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/not-writable-repo");
+    await user.tab();
+
+    expect(await screen.findByText(/permisos de escritura/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
+  });
+
+  it("should fill in the local path when a folder is picked from the directory browser", async () => {
+    const user = userEvent.setup();
+    renderProjectsPage();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+
+    await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
+    await user.click(screen.getByRole("button", { name: "Explorar…" }));
+
+    await user.click(await screen.findByRole("button", { name: "projects" }));
+    await user.click(await screen.findByRole("button", { name: "my-repo" }));
+    await user.click(screen.getByRole("button", { name: "Seleccionar esta carpeta" }));
+
+    expect(screen.getByLabelText("Ruta local")).toHaveValue(`${FAKE_HOME}/projects/my-repo`);
+    expect(screen.getByLabelText("Nombre")).toHaveValue("my-repo");
   });
 
   it("should show a conflict error when creating a project with an already-registered local path", async () => {
@@ -77,6 +142,9 @@ describe("ProjectsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "+ Añadir proyecto" }));
     await user.type(screen.getByLabelText("Ruta local"), EXISTING_PROJECT.localPath);
+    await user.tab();
+    await waitFor(() => expect(screen.getByLabelText("Comando de arranque")).toBeEnabled());
+
     await user.type(screen.getByLabelText("Comando de arranque"), "pnpm dev");
     await user.click(screen.getByRole("button", { name: "Añadir proyecto" }));
 

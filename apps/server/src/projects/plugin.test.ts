@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,12 +11,34 @@ import { buildApp } from "../app.js";
 import { runMigrations } from "../db/migrate.js";
 import { readProjectConfigFile } from "./config-file.js";
 
-function createGitRepoDir(): string {
+function initGitRepoDir(): string {
   const repoPath = mkdtempSync(join(tmpdir(), "worktrees-manager-plugin-"));
-  mkdirSync(join(repoPath, ".git"));
+  execFileSync("git", ["init"], { cwd: repoPath, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoPath,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: repoPath, stdio: "ignore" });
 
   return repoPath;
 }
+
+function createGitRepoDir(): string {
+  const repoPath = initGitRepoDir();
+
+  writeFileSync(join(repoPath, "README.md"), "# test\n");
+  execFileSync("git", ["add", "."], { cwd: repoPath, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "initial commit"], { cwd: repoPath, stdio: "ignore" });
+
+  return repoPath;
+}
+
+const SAMPLE_PROJECT_FIELDS = {
+  name: "worktrees-manager",
+  devCommand: "pnpm dev",
+  portRangeStart: 3000,
+  portRangeEnd: 3099,
+};
 
 describe("projects plugin", () => {
   let db: Database.Database;
@@ -31,6 +54,7 @@ describe("projects plugin", () => {
 
   afterEach(() => {
     for (const repoPath of repoPaths) {
+      chmodSync(repoPath, 0o755);
       rmSync(repoPath, { recursive: true, force: true });
     }
   });
@@ -49,7 +73,7 @@ describe("projects plugin", () => {
     expect(response.json()).toEqual([]);
   });
 
-  it("should report no config file when looking up a fresh git repo path", async () => {
+  it("should report hasCommits and isWritable when looking up a fresh git repo path", async () => {
     const repoPath = trackRepoPath();
 
     const response = await app.inject({
@@ -62,9 +86,23 @@ describe("projects plugin", () => {
       localPath: repoPath,
       exists: true,
       isGitRepo: true,
+      hasCommits: true,
+      isWritable: true,
       existingProjectId: null,
       configFile: null,
     });
+  });
+
+  it("should report hasCommits=false when looking up a git repo without any commit", async () => {
+    const repoPath = initGitRepoDir();
+    repoPaths.push(repoPath);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/lookup?localPath=${repoPath}`,
+    });
+
+    expect(response.json()).toMatchObject({ isGitRepo: true, hasCommits: false });
   });
 
   it("should create a project and write the config file when the path is a valid git repo", async () => {
@@ -73,13 +111,7 @@ describe("projects plugin", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: {
-        localPath: repoPath,
-        name: "worktrees-manager",
-        devCommand: "pnpm dev",
-        portRangeStart: 3000,
-        portRangeEnd: 3099,
-      },
+      payload: { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath },
     });
 
     expect(response.statusCode).toBe(201);
@@ -98,13 +130,38 @@ describe("projects plugin", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: {
-        localPath: repoPath,
-        name: "not-a-repo",
-        devCommand: "pnpm dev",
-        portRangeStart: 3000,
-        portRangeEnd: 3099,
-      },
+      payload: { ...SAMPLE_PROJECT_FIELDS, name: "not-a-repo", localPath: repoPath },
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+
+  it("should reject creating a project when the git repo has no commits yet", async () => {
+    const repoPath = initGitRepoDir();
+    repoPaths.push(repoPath);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { ...SAMPLE_PROJECT_FIELDS, name: "no-commits", localPath: repoPath },
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+
+  it("should reject creating a project when the local path has no write permission", async () => {
+    // Root (habitual en contenedores de CI) ignora los bits de permisos.
+    if (process.getuid?.() === 0) {
+      return;
+    }
+
+    const repoPath = trackRepoPath();
+    chmodSync(repoPath, 0o555);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { ...SAMPLE_PROJECT_FIELDS, name: "no-write-permission", localPath: repoPath },
     });
 
     expect(response.statusCode).toBe(422);
@@ -128,13 +185,7 @@ describe("projects plugin", () => {
 
   it("should reject creating a project with a local path already registered by another project", async () => {
     const repoPath = trackRepoPath();
-    const projectInput = {
-      localPath: repoPath,
-      name: "worktrees-manager",
-      devCommand: "pnpm dev",
-      portRangeStart: 3000,
-      portRangeEnd: 3099,
-    };
+    const projectInput = { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath };
 
     await app.inject({ method: "POST", url: "/api/projects", payload: projectInput });
     const response = await app.inject({
@@ -151,13 +202,7 @@ describe("projects plugin", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: {
-        localPath: repoPath,
-        name: "worktrees-manager",
-        devCommand: "pnpm dev",
-        portRangeStart: 3000,
-        portRangeEnd: 3099,
-      },
+      payload: { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath },
     });
     const created = createResponse.json();
 
@@ -187,13 +232,7 @@ describe("projects plugin", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: {
-        localPath: repoPath,
-        name: "worktrees-manager",
-        devCommand: "pnpm dev",
-        portRangeStart: 3000,
-        portRangeEnd: 3099,
-      },
+      payload: { ...SAMPLE_PROJECT_FIELDS, localPath: repoPath },
     });
     const created = createResponse.json();
 

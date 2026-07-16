@@ -1,5 +1,6 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm } from "react-hook-form";
+import { useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DirectoryBrowser } from "@/features/filesystem/components/directory-browser";
 
 import { useCreateProject } from "../api/use-create-project";
 import { useProjectPathLookup } from "../api/use-project-path-lookup";
@@ -19,6 +21,7 @@ import {
   createProjectFormSchema,
   type CreateProjectFormInput,
   type CreateProjectFormValues,
+  type ProjectPathLookup,
 } from "../schemas";
 
 function basenameOf(localPath: string): string {
@@ -30,6 +33,35 @@ function basenameOf(localPath: string): string {
   );
 }
 
+type DialogStep = "form" | "browse";
+
+type PathIssue = "not-git-repo" | "no-commits" | "not-writable";
+
+const PATH_ISSUE_MESSAGES: Record<PathIssue, string> = {
+  "not-git-repo":
+    "Esta carpeta no es un repositorio git. Ejecuta git init en ella o elige la carpeta raíz de tu repo.",
+  "no-commits":
+    "Este repositorio no tiene ningún commit. Los worktrees necesitan al menos una rama con historial: haz un primer commit y vuelve a intentarlo.",
+  "not-writable":
+    "No tienes permisos de escritura sobre esta carpeta. Git necesita poder crear ahí los metadatos del worktree.",
+};
+
+function classifyPathIssue(lookup: ProjectPathLookup): PathIssue | null {
+  if (!lookup.exists || !lookup.isGitRepo) {
+    return "not-git-repo";
+  }
+
+  if (!lookup.hasCommits) {
+    return "no-commits";
+  }
+
+  if (!lookup.isWritable) {
+    return "not-writable";
+  }
+
+  return null;
+}
+
 export function CreateProjectDialog({
   open,
   onOpenChange,
@@ -39,12 +71,19 @@ export function CreateProjectDialog({
 }) {
   const createProject = useCreateProject();
   const pathLookup = useProjectPathLookup();
+  const [step, setStep] = useState<DialogStep>("form");
+  const [browsePath, setBrowsePath] = useState<string | undefined>(undefined);
+  const [pathValidation, setPathValidation] = useState<{
+    path: string;
+    issue: PathIssue | null;
+  } | null>(null);
 
   const {
     register,
     handleSubmit,
     setValue,
     getValues,
+    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<CreateProjectFormInput, unknown, CreateProjectFormValues>({
@@ -58,12 +97,20 @@ export function CreateProjectDialog({
     },
   });
 
-  async function handleLocalPathBlur(event: React.FocusEvent<HTMLInputElement>): Promise<void> {
-    const localPath = event.target.value.trim();
+  const watchedLocalPath = useWatch({ control, name: "localPath" });
+  const currentPathIssue =
+    pathValidation != null && pathValidation.path === watchedLocalPath
+      ? pathValidation.issue
+      : undefined;
+  const isPathConfirmed = currentPathIssue === null;
 
+  async function applyLocalPath(localPath: string): Promise<void> {
     if (localPath === "") {
+      setPathValidation(null);
       return;
     }
+
+    setValue("localPath", localPath);
 
     if (getValues("name") === "") {
       setValue("name", basenameOf(localPath));
@@ -71,11 +118,27 @@ export function CreateProjectDialog({
 
     const lookup = await pathLookup.mutateAsync(localPath);
 
+    setPathValidation({ path: localPath, issue: classifyPathIssue(lookup) });
+
     if (lookup.configFile) {
       setValue("devCommand", lookup.configFile.devCommand);
       setValue("portRangeStart", lookup.configFile.portRangeStart);
       setValue("portRangeEnd", lookup.configFile.portRangeEnd);
     }
+  }
+
+  async function handleLocalPathBlur(event: React.FocusEvent<HTMLInputElement>): Promise<void> {
+    await applyLocalPath(event.target.value.trim());
+  }
+
+  function handleOpenExplorer(): void {
+    setBrowsePath(getValues("localPath") || undefined);
+    setStep("browse");
+  }
+
+  function handleBrowseSelect(path: string): void {
+    void applyLocalPath(path);
+    setStep("form");
   }
 
   async function onSubmit(values: CreateProjectFormValues): Promise<void> {
@@ -95,110 +158,147 @@ export function CreateProjectDialog({
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           reset();
+          setStep("form");
         }
         onOpenChange(nextOpen);
       }}
     >
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Añadir proyecto</DialogTitle>
-          <DialogDescription>
-            Indica la ruta local del repositorio. Si ya tiene un{" "}
-            <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque y el rango
-            de puertos.
-          </DialogDescription>
-        </DialogHeader>
+        {step === "form" ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Añadir proyecto</DialogTitle>
+              <DialogDescription>
+                Indica la ruta local del repositorio. Si ya tiene un{" "}
+                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque y el
+                rango de puertos.
+              </DialogDescription>
+            </DialogHeader>
 
-        <form className="grid gap-4" onSubmit={(event) => void handleSubmit(onSubmit)(event)}>
-          <div className="grid gap-1.5">
-            <Label htmlFor="localPath">Ruta local</Label>
-            <Input
-              id="localPath"
-              placeholder="/Users/tú/proyectos/mi-repo"
-              aria-invalid={errors.localPath != null}
-              aria-describedby={errors.localPath ? "localPath-error" : undefined}
-              {...register("localPath", {
-                onBlur: (event: React.FocusEvent<HTMLInputElement>) =>
-                  void handleLocalPathBlur(event),
-              })}
-            />
-            {errors.localPath && (
-              <p id="localPath-error" className="text-sm text-destructive">
-                {errors.localPath.message}
-              </p>
-            )}
-          </div>
+            <form className="grid gap-4" onSubmit={(event) => void handleSubmit(onSubmit)(event)}>
+              <div className="grid gap-1.5">
+                <Label htmlFor="localPath">Ruta local</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="localPath"
+                    placeholder="/Users/tú/proyectos/mi-repo"
+                    aria-invalid={errors.localPath != null}
+                    aria-describedby={errors.localPath ? "localPath-error" : undefined}
+                    {...register("localPath", {
+                      onBlur: (event: React.FocusEvent<HTMLInputElement>) =>
+                        void handleLocalPathBlur(event),
+                    })}
+                  />
+                  <Button type="button" variant="outline" onClick={handleOpenExplorer}>
+                    Explorar…
+                  </Button>
+                </div>
+                {errors.localPath && (
+                  <p id="localPath-error" className="text-sm text-destructive">
+                    {errors.localPath.message}
+                  </p>
+                )}
+                {pathLookup.isPending && (
+                  <p className="text-sm text-muted-foreground">Comprobando la ruta…</p>
+                )}
+                {currentPathIssue != null && (
+                  <p className="text-sm text-destructive" role="alert">
+                    {PATH_ISSUE_MESSAGES[currentPathIssue]}
+                  </p>
+                )}
+              </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="name">Nombre</Label>
-            <Input
-              id="name"
-              aria-invalid={errors.name != null}
-              aria-describedby={errors.name ? "name-error" : undefined}
-              {...register("name")}
-            />
-            {errors.name && (
-              <p id="name-error" className="text-sm text-destructive">
-                {errors.name.message}
-              </p>
-            )}
-          </div>
+              <fieldset
+                disabled={!isPathConfirmed}
+                className="grid gap-4 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <div className="grid gap-1.5">
+                  <Label htmlFor="name">Nombre</Label>
+                  <Input
+                    id="name"
+                    aria-invalid={errors.name != null}
+                    aria-describedby={errors.name ? "name-error" : undefined}
+                    {...register("name")}
+                  />
+                  {errors.name && (
+                    <p id="name-error" className="text-sm text-destructive">
+                      {errors.name.message}
+                    </p>
+                  )}
+                </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="devCommand">Comando de arranque</Label>
-            <Input
-              id="devCommand"
-              placeholder="pnpm dev"
-              aria-invalid={errors.devCommand != null}
-              aria-describedby={errors.devCommand ? "devCommand-error" : undefined}
-              {...register("devCommand")}
-            />
-            {errors.devCommand && (
-              <p id="devCommand-error" className="text-sm text-destructive">
-                {errors.devCommand.message}
-              </p>
-            )}
-          </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="devCommand">Comando de arranque</Label>
+                  <Input
+                    id="devCommand"
+                    placeholder="pnpm dev"
+                    aria-invalid={errors.devCommand != null}
+                    aria-describedby={errors.devCommand ? "devCommand-error" : undefined}
+                    {...register("devCommand")}
+                  />
+                  {errors.devCommand && (
+                    <p id="devCommand-error" className="text-sm text-destructive">
+                      {errors.devCommand.message}
+                    </p>
+                  )}
+                </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="portRangeStart">Puerto inicial</Label>
-              <Input
-                id="portRangeStart"
-                type="number"
-                aria-invalid={errors.portRangeStart != null}
-                {...register("portRangeStart")}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="portRangeEnd">Puerto final</Label>
-              <Input
-                id="portRangeEnd"
-                type="number"
-                aria-invalid={errors.portRangeEnd != null}
-                aria-describedby={errors.portRangeEnd ? "portRangeEnd-error" : undefined}
-                {...register("portRangeEnd")}
-              />
-              {errors.portRangeEnd && (
-                <p id="portRangeEnd-error" className="text-sm text-destructive">
-                  {errors.portRangeEnd.message}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="portRangeStart">Puerto inicial</Label>
+                    <Input
+                      id="portRangeStart"
+                      type="number"
+                      aria-invalid={errors.portRangeStart != null}
+                      {...register("portRangeStart")}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="portRangeEnd">Puerto final</Label>
+                    <Input
+                      id="portRangeEnd"
+                      type="number"
+                      aria-invalid={errors.portRangeEnd != null}
+                      aria-describedby={errors.portRangeEnd ? "portRangeEnd-error" : undefined}
+                      {...register("portRangeEnd")}
+                    />
+                    {errors.portRangeEnd && (
+                      <p id="portRangeEnd-error" className="text-sm text-destructive">
+                        {errors.portRangeEnd.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </fieldset>
+
+              {createProject.isError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {createProject.error.message}
                 </p>
               )}
-            </div>
-          </div>
 
-          {createProject.isError && (
-            <p className="text-sm text-destructive" role="alert">
-              {createProject.error.message}
-            </p>
-          )}
+              <DialogFooter>
+                <Button type="submit" disabled={!isPathConfirmed || isSubmitting}>
+                  Añadir proyecto
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Explorar carpetas</DialogTitle>
+              <DialogDescription>Elige la carpeta del repositorio.</DialogDescription>
+            </DialogHeader>
 
-          <DialogFooter>
-            <Button type="submit" disabled={isSubmitting}>
-              Añadir proyecto
-            </Button>
-          </DialogFooter>
-        </form>
+            <DirectoryBrowser
+              path={browsePath}
+              onNavigate={setBrowsePath}
+              onSelect={handleBrowseSelect}
+              onCancel={() => setStep("form")}
+            />
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

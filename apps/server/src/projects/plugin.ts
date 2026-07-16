@@ -35,13 +35,15 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       const { localPath } = request.query;
-      const { exists, isGitRepo } = inspectRepoPath(localPath);
+      const { exists, isGitRepo, hasCommits, isWritable } = inspectRepoPath(localPath);
       const existingProject = findProjectByLocalPath(fastify.db, localPath);
 
       return {
         localPath,
         exists,
         isGitRepo,
+        hasCommits,
+        isWritable,
         existingProjectId: existingProject?.id ?? null,
         configFile: exists ? readProjectConfigFile(localPath) : null,
       };
@@ -57,12 +59,19 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { exists, isGitRepo } = inspectRepoPath(request.body.localPath);
+      const { localPath } = request.body;
+      const { exists, isGitRepo, hasCommits, isWritable } = inspectRepoPath(localPath);
 
       if (!exists || !isGitRepo) {
-        throw new InvalidProjectPathError(
-          `${request.body.localPath} no existe o no es un repositorio git`,
-        );
+        throw new InvalidProjectPathError(`${localPath} no existe o no es un repositorio git`);
+      }
+
+      if (!hasCommits) {
+        throw new InvalidProjectPathError(`${localPath} no tiene ningún commit todavía`);
+      }
+
+      if (!isWritable) {
+        throw new InvalidProjectPathError(`${localPath} no tiene permisos de escritura`);
       }
 
       const project = insertProject(fastify.db, request.body);
