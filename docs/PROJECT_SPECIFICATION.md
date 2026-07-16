@@ -1,7 +1,10 @@
-# Worktrees Manager — Especificación y alcance (v0.1)
+# Worktrees Manager — Especificación del Proyecto
 
-> Documento vivo. Se irá ampliando por fases a medida que el proyecto avance.
-> Seguimiento de tareas y fases: [Notion — Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e)
+## v1.0
+
+> Evoluciona `SPEC.md` v0.1 (retirado). Este documento es la fuente de verdad para el **qué** y el **por qué** del proyecto. El **cómo** técnico detallado vive en [`ARCHITECTURE.md`](./ARCHITECTURE.md) y la planificación temporal por fases en [`ROADMAP.md`](./ROADMAP.md). Las convenciones de código a seguir durante la implementación están en el `AGENTS.md` canon + capas de stack importadas desde `CLAUDE.md`.
+
+---
 
 ## 1. Objetivo
 
@@ -52,37 +55,34 @@ No es una herramienta genérica para cualquier stack: se optimiza para el flujo 
 - Autenticación multi-usuario (es una herramienta local, mono-usuario).
 - Despliegue remoto — corre siempre en local.
 
+Estas exclusiones se revisan al cierre del roadmap (ver `ROADMAP.md`); no son una prohibición permanente, sino una decisión consciente de foco.
+
 ## 4. Instalación y distribución
 
-La app corre siempre en local (tu máquina), pero gestiona N proyectos a la vez — no hay que "instalar" nada dentro de cada repo gestionado, salvo un fichero de configuración opcional (ver abajo).
+La app corre siempre en local (tu máquina), pero gestiona N proyectos a la vez — no hay que "instalar" nada dentro de cada repo gestionado, salvo un fichero de configuración opcional.
 
-- **Distribución**: paquete npm, ejecutable con `npx worktrees-manager` (sin instalación permanente) o instalado globalmente (`npm i -g worktrees-manager`). Arranca el servidor local (Fastify + Socket.io) y sirve el dashboard en `localhost:PUERTO`.
-- **Registro central**: `~/.worktrees-manager/` (fuera de cualquier repo gestionado) guarda en SQLite qué rutas de proyecto están dadas de alta, sus worktrees, puertos asignados y logs.
+- **Distribución**: paquete npm, ejecutable con `npx worktrees-manager` (sin instalación permanente) o instalado globalmente (`npm i -g worktrees-manager`). Arranca el servidor local y sirve el dashboard en `localhost:PUERTO`.
+- **Registro central**: `~/.worktrees-manager/` (fuera de cualquier repo gestionado) guarda en SQLite qué rutas de proyecto están dadas de alta, sus worktrees, puertos asignados y logs. Detalle técnico en `ARCHITECTURE.md` §4.
 - **Config por proyecto versionada**: cada repo gestionado puede tener un `.worktrees-manager.json` en su raíz con el comando de arranque y el rango de puertos. Al añadir un proyecto desde la UI, si el fichero ya existe se lee y autorellena el formulario; si no existe, la app lo crea a partir de lo que rellenes. Ventaja: la config viaja con el repo (útil entre máquinas), en vez de vivir solo en la BD local del dashboard.
 - **Arranque del propio dashboard**: única acción que sigue requiriendo un comando (`npx worktrees-manager`), ya que es un proceso de servidor que debe estar corriendo. Auto-arranque como servicio en segundo plano (launchd/systemd) queda como mejora futura, no como requisito de la v1.
 
-## 5. Decisiones de arquitectura
+## 5. Stack Tecnológico
 
-| Decisión | Elección | Motivo |
-|---|---|---|
-| Forma de la app | Web app local (navegador, `localhost:PUERTO`) | Evita la complejidad de empaquetado de Tauri/Electron; encaja con el stack habitual del autor. |
-| Alcance | Multi-proyecto | Un mismo dashboard gestiona worktrees de varios repos registrados. |
-| Integración PRs | GitHub CLI (`gh`) | Sin gestión de tokens propios; se apoya en la sesión ya autenticada del usuario. |
-| Frontend | Vite + React + TypeScript | Stack habitual del autor, sin necesidad de SSR/SEO que justifique Next.js. |
-| Estilos / UI | Tailwind CSS + shadcn/ui | Componentes con buen aspecto sin inversión de diseño dedicada. |
-| Backend | Node.js + Fastify | Expone la API REST y gestiona procesos hijos (arranque/parada de entornos). |
-| Tiempo real (logs, estado) | WebSockets (Socket.io) | Streaming de logs y actualizaciones de estado sin polling agresivo desde el cliente. |
-| Persistencia | SQLite (`better-sqlite3`) | Fichero local único, sin servidor de BD, suficiente para proyectos/worktrees/puertos/logs. |
-| Operaciones git | `simple-git` / `execa` sobre el `git` del sistema | Evita reimplementar git; delega en el binario real instalado. |
-| Gestión de puertos | Comprobación de rango reservado + verificación real (ej. `detect-port`) | Evita colisiones tanto entre worktrees como con otros procesos del sistema. |
-| Alta de proyectos | 100% desde la UI (sin CLI de por medio) | Prioridad de UX: nada de comandos que memorizar para el uso del día a día, todo con botones/CTAs. |
-| Config por proyecto | Fichero versionado `.worktrees-manager.json` en la raíz de cada repo | Viaja con el repo entre máquinas; la app lo lee/escribe desde la UI, el usuario no lo edita a mano. |
+| Categoría                  | Tecnología                                                              | Justificación                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Forma de la app            | Web app local (navegador, `localhost:PUERTO`)                           | Evita la complejidad de empaquetado de Tauri/Electron; encaja con el stack habitual del autor.      |
+| Frontend                   | Vite + React + TypeScript                                               | Stack habitual del autor, sin necesidad de SSR/SEO que justifique Next.js.                          |
+| Estilos / UI               | Tailwind CSS + shadcn/ui                                                | Componentes con buen aspecto sin inversión de diseño dedicada.                                      |
+| Backend                    | Node.js + Fastify                                                       | Expone la API REST y gestiona procesos hijos (arranque/parada de entornos).                         |
+| Tiempo real (logs, estado) | WebSockets (Socket.io)                                                  | Streaming de logs y actualizaciones de estado sin polling agresivo desde el cliente.                |
+| Persistencia               | SQLite (`better-sqlite3`)                                               | Fichero local único, sin servidor de BD, suficiente para proyectos/worktrees/puertos/logs.          |
+| Operaciones git            | `simple-git` / `execa` sobre el `git` del sistema                       | Evita reimplementar git; delega en el binario real instalado.                                       |
+| Gestión de puertos         | Comprobación de rango reservado + verificación real (ej. `detect-port`) | Evita colisiones tanto entre worktrees como con otros procesos del sistema.                         |
+| Integración PRs            | GitHub CLI (`gh`)                                                       | Sin gestión de tokens propios; se apoya en la sesión ya autenticada del usuario.                    |
+| Alta de proyectos          | 100% desde la UI (sin CLI de por medio)                                 | Prioridad de UX: nada de comandos que memorizar para el uso del día a día, todo con botones/CTAs.   |
+| Config por proyecto        | Fichero versionado `.worktrees-manager.json` en la raíz de cada repo    | Viaja con el repo entre máquinas; la app lo lee/escribe desde la UI, el usuario no lo edita a mano. |
 
-### Esquema de datos (borrador inicial)
-
-- **Project**: id, nombre, ruta local, comando de arranque, rango de puertos, repo remoto (owner/name).
-- **Worktree**: id, project_id, rama, ruta, puerto, estado del proceso, PID (si corre), PR asociada (nº), creado_en.
-- **LogEntry**: worktree_id, timestamp, stream (stdout/stderr), contenido. (Persistencia acotada, ej. últimas N líneas o rotación por tamaño.)
+Detalle de cómo se conectan estas piezas (estructura de carpetas, esquema de datos, diagramas) en `ARCHITECTURE.md`.
 
 ## 6. Ideas para futuras fases (backlog, no comprometido)
 
@@ -93,57 +93,7 @@ La app corre siempre en local (tu máquina), pero gestiona N proyectos a la vez 
 - Métricas simples: tiempo de vida medio de un worktree, nº de worktrees activos a lo largo del tiempo.
 - Auto-arranque del dashboard como servicio en segundo plano (launchd/systemd) al iniciar sesión.
 
-## 7. Fases de desarrollo (Roadmap)
+## 7. Estado del documento
 
-### Fase 1 — Scaffolding
-
-- Monorepo (frontend + backend)
-- Vite + React + TypeScript
-- Fastify + Socket.io (base)
-- ESLint / Prettier
-- Registro central `~/.worktrees-manager/` (SQLite)
-
-### Fase 2 — Modelo de datos y persistencia
-
-- Esquema SQLite: Project, Worktree, LogEntry
-- Migraciones
-
-### Fase 3 — Gestión de proyectos
-
-- CRUD de proyectos desde la UI
-- Lectura/escritura de `.worktrees-manager.json`
-- Alta de proyecto (autorelleno si el fichero existe, creación si no)
-
-### Fase 4 — Ciclo de vida de worktrees
-
-- Crear worktree (`main`, rama concreta o rama actual)
-- Asignación automática de puerto libre
-- Borrar worktree (con confirmación)
-- Listado de worktrees por proyecto
-
-### Fase 5 — Entornos de desarrollo y logs
-
-- Arranque / parada del proceso de dev
-- Streaming de logs en tiempo real (WebSockets)
-- Estado visual: parado / arrancando / corriendo / error
-
-### Fase 6 — Estado de cambios sin commitear
-
-- Polling de `git status --porcelain`
-- Resumen de ficheros modificados / nuevos / borrados
-
-### Fase 7 — Integración con Pull Requests
-
-- Asociación manual (o por nombre de rama) con `gh` CLI
-- Estado: abierta / cerrada / mergeada, checks de CI
-- Enlace directo a GitHub
-
-### Fase 8 — Distribución
-
-- Paquete npm ejecutable (`npx worktrees-manager`)
-- Instalación global (`npm i -g`)
-
-## 8. Estado del documento
-
-- v0.1 — alcance inicial y decisiones de arquitectura acordadas.
-- Desglose en fases (sección 7) añadido — pendiente de reflejar en Notion.
+- v0.1 (`SPEC.md`, retirado) — alcance inicial y decisiones de arquitectura acordadas; desglose en fases añadido el 2026-07-14.
+- v1.0 — migrado al modelo documental de varios ficheros (`PROJECT_SPECIFICATION.md` + `ARCHITECTURE.md` + `ROADMAP.md` + `docs/adr/`), al arrancar la Fase 1 — Scaffolding (2026-07-16).
