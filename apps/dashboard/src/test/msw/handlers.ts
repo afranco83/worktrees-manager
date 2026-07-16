@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { z } from "zod";
 
 import type { Project } from "@/features/projects/schemas";
+import type { ProjectGitInfo, Worktree } from "@/features/worktrees/schemas";
 
 const createProjectRequestSchema = z.object({
   localPath: z.string(),
@@ -24,6 +25,43 @@ export let projectsStore: Project[] = [];
 
 export function resetProjectsStore(initialProjects: Project[] = []): void {
   projectsStore = [...initialProjects];
+}
+
+function requirePathParam(value: string | readonly string[] | undefined): string {
+  if (typeof value !== "string") {
+    throw new Error("Se esperaba un único parámetro de ruta");
+  }
+
+  return value;
+}
+
+const createWorktreeRequestSchema = z.object({
+  newBranch: z.string(),
+  base: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("default") }),
+    z.object({ type: z.literal("current") }),
+    z.object({ type: z.literal("branch"), branch: z.string() }),
+  ]),
+});
+
+const DEFAULT_GIT_INFO: ProjectGitInfo = {
+  currentBranch: "main",
+  defaultBranch: "main",
+  branches: ["main"],
+};
+
+export let worktreesStore: Record<string, Worktree[]> = {};
+export let gitInfoStore: Record<string, ProjectGitInfo> = {};
+let nextWorktreePort = 4100;
+
+export function resetWorktreesStore(): void {
+  worktreesStore = {};
+  gitInfoStore = {};
+  nextWorktreePort = 4100;
+}
+
+export function setProjectGitInfo(projectId: string, gitInfo: ProjectGitInfo): void {
+  gitInfoStore = { ...gitInfoStore, [projectId]: gitInfo };
 }
 
 export const FAKE_HOME = "/home/test";
@@ -106,6 +144,84 @@ export const handlers = [
       existingProjectId: existingProject?.id ?? null,
       configFile: null,
     });
+  }),
+
+  http.get("/api/projects/:projectId/git-info", ({ params }) => {
+    const projectId = requirePathParam(params.projectId);
+
+    return HttpResponse.json(gitInfoStore[projectId] ?? DEFAULT_GIT_INFO);
+  }),
+
+  http.get("/api/projects/:projectId/worktrees", ({ params }) => {
+    const projectId = requirePathParam(params.projectId);
+
+    return HttpResponse.json(worktreesStore[projectId] ?? []);
+  }),
+
+  http.post("/api/projects/:projectId/worktrees", async ({ params, request }) => {
+    const projectId = requirePathParam(params.projectId);
+    const body = createWorktreeRequestSchema.parse(await request.json());
+    const existing = worktreesStore[projectId] ?? [];
+
+    if (existing.some((worktree) => worktree.branch === body.newBranch)) {
+      return HttpResponse.json(
+        { error: "Conflict", message: `La rama "${body.newBranch}" ya existe`, statusCode: 409 },
+        { status: 409 },
+      );
+    }
+
+    const worktree: Worktree = {
+      id: crypto.randomUUID(),
+      projectId,
+      branch: body.newBranch,
+      path: `/repos/project.worktrees/${body.newBranch}`,
+      port: nextWorktreePort,
+      processStatus: "stopped",
+      pid: null,
+      prNumber: null,
+      createdAt: new Date().toISOString(),
+    };
+    nextWorktreePort += 1;
+
+    worktreesStore = { ...worktreesStore, [projectId]: [...existing, worktree] };
+
+    return HttpResponse.json(worktree, { status: 201 });
+  }),
+
+  http.delete("/api/worktrees/:id", ({ params, request }) => {
+    const id = requirePathParam(params.id);
+    const force = new URL(request.url).searchParams.get("force") === "true";
+
+    for (const [projectId, worktrees] of Object.entries(worktreesStore)) {
+      const worktree = worktrees.find((candidate) => candidate.id === id);
+
+      if (!worktree) {
+        continue;
+      }
+
+      if (worktree.branch.includes("dirty") && !force) {
+        return HttpResponse.json(
+          {
+            error: "Conflict",
+            message: "El worktree tiene cambios sin commitear o ficheros sin seguimiento",
+            statusCode: 409,
+          },
+          { status: 409 },
+        );
+      }
+
+      worktreesStore = {
+        ...worktreesStore,
+        [projectId]: worktrees.filter((candidate) => candidate.id !== id),
+      };
+
+      return new HttpResponse(null, { status: 204 });
+    }
+
+    return HttpResponse.json(
+      { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+      { status: 404 },
+    );
   }),
 
   http.get("/api/filesystem/directories", ({ request }) => {

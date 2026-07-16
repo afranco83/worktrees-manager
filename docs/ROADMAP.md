@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 3 — Gestión de proyectos, cerrada el 2026-07-16**; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 4 — Ciclo de vida de worktrees, cerrada el 2026-07-16**; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -94,18 +94,26 @@ Tareas:
 
 ---
 
-## Fase 4 — Ciclo de vida de worktrees
+## Fase 4 — Ciclo de vida de worktrees _(cerrada — 2026-07-16)_
 
 **Objetivo**: crear/borrar/listar worktrees con asignación automática de puerto.
 
 Tareas:
 
-- [ ] Crear worktree (`main`, rama concreta o rama actual)
-- [ ] Asignación automática de puerto libre
-- [ ] Borrar worktree (con confirmación)
-- [ ] Listado de worktrees por proyecto
+- [x] Crear worktree (rama por defecto, rama actual o rama concreta existente, siempre como base de una rama nueva — ver [ADR-0003](./adr/0003-ciclo-de-vida-de-worktrees.md))
+- [x] Asignación automática de puerto libre (sin colisiones entre worktrees del mismo proyecto ni a nivel de máquina)
+- [x] Borrar worktree (con confirmación, y "Forzar borrado" si hay cambios sin commitear)
+- [x] Listado de worktrees por proyecto
 
-**DoD**: a definir al cerrar Fase 3.
+**DoD**: desde la UI se crea/borra un worktree real en disco con puerto asignado sin colisiones. **Cumplido**: 41 tests backend nuevos (`apps/server/src/worktrees/`, git real contra repos temporales, incluida una prueba de concurrencia con dos altas simultáneas del mismo proyecto) + 4 tests frontend (`apps/dashboard/src/features/worktrees/`) en verde; verificado manualmente en navegador con Playwright contra un repo git de prueba real: alta desde rama por defecto (directorio y rama confirmados también por `git worktree list` en terminal), segunda alta del mismo proyecto con puerto distinto sin colisión, borrado normal de un worktree limpio, y borrado de un worktree con cambios sin commitear (falla con el mensaje esperado, "Forzar borrado" sí lo elimina).
+
+**Adenda (2026-07-16)**:
+
+- Segundo dominio de negocio de punta a punta (`apps/server/src/worktrees/`), mismo patrón que `projects` (Fase 3): `schemas.ts`/`repository.ts`/`plugin.ts`, más `git-worktree.ts` (git real vía `execa`, nueva dependencia — ver [ADR-0003](./adr/0003-ciclo-de-vida-de-worktrees.md)), `port-allocator.ts` (bind real + `EADDRINUSE`, sin `detect-port`) y `project-lock.ts` (cola de promesas en memoria por `projectId`, backstop de un índice `UNIQUE` en `worktrees.port` a nivel de SQLite).
+- **Bug real encontrado en la verificación manual en navegador** (no lo cubría ningún test): `deleteWorktreeQuerySchema` usaba `z.coerce.boolean()` para el query param `force`, y `z.coerce.boolean()` hace `Boolean(valor)` — como cualquier string no vacío es "truthy" en JS, `?force=false` se coaccionaba a `true` y el borrado normal forzaba siempre, sin importar el valor real del parámetro. Corregido con un `z.enum(["true", "false"]).default("false").transform(...)` que compara el texto en vez de coaccionar, con test de regresión explícito para `?force=false`.
+- **Segundo bug real encontrado en la misma verificación**: los mensajes de error de git (`git worktree remove`/`add`) salen localizados según el `LANG` del proceso (p. ej. `es_ES.UTF-8` → "no es un árbol de trabajo" en vez de "is not a working tree"), y `git-worktree.ts` distinguía los casos de dominio (rama ya existe, cambios sin commitear) haciendo matching por regex en inglés sobre ese stderr — así que en cualquier máquina con locale no inglés, todos los errores de git caían al genérico `GitWorktreeOperationError` (422) en vez de sus errores específicos (409), rompiendo en particular el flujo de "Forzar borrado". Corregido fijando `LC_ALL=C` en el entorno de cada proceso `git` invocado desde `execa`.
+- La política de "solo rama nueva por worktree" (nunca se hace checkout directo de una rama existente sin worktree) y el resto de decisiones de diseño (resolución de rama por defecto, convención de ruta en disco, estrategia de borrado ante worktree con cambios sin commitear o borrado a mano) están documentadas en [ADR-0003](./adr/0003-ciclo-de-vida-de-worktrees.md).
+- UI: nuevo primitivo shadcn `select`; `WorktreesDialog` reutiliza el patrón de "un único `Dialog` con pasos internos" de la Fase 3 (`"list" | "create" | {type: "delete", worktree}`) — el paso de borrado se implementó como contenido embebido en el mismo `Dialog` (no un `AlertDialog` anidado), para no reproducir el problema de doble backdrop que ese mismo patrón evitaba en la Fase 3.
 
 ---
 

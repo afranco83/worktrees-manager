@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { WorktreesDialog } from "@/features/worktrees/components/worktrees-dialog";
 
 import { useProjects } from "../api/use-projects";
 import type { Project } from "../schemas";
@@ -13,7 +14,8 @@ type DialogState =
   | { type: "closed" }
   | { type: "create" }
   | { type: "edit"; project: Project }
-  | { type: "delete"; project: Project };
+  | { type: "delete"; project: Project }
+  | { type: "worktrees"; project: Project };
 
 export function ProjectsPage() {
   const { data: projects, isLoading, isError, error } = useProjects();
@@ -37,6 +39,7 @@ export function ProjectsPage() {
           projects={projects}
           onEdit={(project) => setDialogState({ type: "edit", project })}
           onDelete={(project) => setDialogState({ type: "delete", project })}
+          onWorktrees={(project) => setDialogState({ type: "worktrees", project })}
         />
       )}
 
@@ -55,6 +58,14 @@ export function ProjectsPage() {
 
       {dialogState.type === "delete" && (
         <DeleteProjectDialog
+          project={dialogState.project}
+          open
+          onOpenChange={(open) => setDialogState(open ? dialogState : { type: "closed" })}
+        />
+      )}
+
+      {dialogState.type === "worktrees" && (
+        <WorktreesDialog
           project={dialogState.project}
           open
           onOpenChange={(open) => setDialogState(open ? dialogState : { type: "closed" })}

@@ -14,10 +14,12 @@ export function ProjectsTable({
   projects,
   onEdit,
   onDelete,
+  onWorktrees,
 }: {
   projects: Project[];
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  onWorktrees: (project: Project) => void;
 }) {
   if (projects.length === 0) {
     return <p className="text-sm text-muted-foreground">Todavía no hay proyectos registrados.</p>;
@@ -44,6 +46,9 @@ export function ProjectsTable({
               {project.portRangeStart}–{project.portRangeEnd}
             </TableCell>
             <TableCell className="flex justify-end gap-2 text-right">
+              <Button variant="outline" size="sm" onClick={() => onWorktrees(project)}>
+                Worktrees
+              </Button>
               <Button variant="outline" size="sm" onClick={() => onEdit(project)}>
                 Editar
               </Button>

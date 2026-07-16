@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { runMigrations } from "./migrate.js";
-import type { Migration } from "./migrations.js";
+import { migrations, type Migration } from "./migrations.js";
 
 describe("runMigrations", () => {
   let db: Database.Database;
@@ -32,7 +32,7 @@ describe("runMigrations", () => {
 
     const appliedMigrations = db.prepare("SELECT name FROM schema_migrations").all();
 
-    expect(appliedMigrations).toHaveLength(1);
+    expect(appliedMigrations).toHaveLength(migrations.length);
   });
 
   it("should persist a project, a worktree and a log entry when they reference each other via valid foreign keys", () => {

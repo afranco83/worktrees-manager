@@ -147,6 +147,9 @@ importers:
       better-sqlite3:
         specifier: ^12.4.1
         version: 12.11.1
+      execa:
+        specifier: ^9.6.1
+        version: 9.6.1
       fastify:
         specifier: ^5.6.1
         version: 5.10.0

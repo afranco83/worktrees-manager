@@ -45,4 +45,12 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_log_entries_worktree_id_timestamp ON log_entries (worktree_id, timestamp);
     `,
   },
+  {
+    // Un puerto es un recurso de la máquina, no del proyecto: el índice es global,
+    // no por project_id (ver ADR-0003).
+    name: "0002_worktrees_port_unique",
+    up: `
+      CREATE UNIQUE INDEX idx_worktrees_port_unique ON worktrees (port);
+    `,
+  },
 ];
