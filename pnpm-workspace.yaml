@@ -5,3 +5,6 @@ allowBuilds:
   better-sqlite3: true
   # esbuild: dependencia transitiva de vite/tsx, sin superficie nueva.
   esbuild: true
+  # msw: postinstall solo relevante para el modo browser (Service Worker); usamos
+  # setupServer (Node) en los tests, no hace falta ejecutarlo.
+  msw: false

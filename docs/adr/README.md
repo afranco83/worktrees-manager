@@ -7,3 +7,4 @@ A diferencia de otros repos propios sobre el mismo modelo documental, aquí no h
 | ADR                                                  | Decisión                                                                                              |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | [0001](./0001-esquema-datos-y-migraciones-sqlite.md) | Migraciones SQLite hand-rolled + IDs UUID en `projects`/`worktrees`, autoincremental en `log_entries` |
+| [0002](./0002-stack-ui-fase-3.md)                    | Preset `base-nova` de shadcn/ui, `standardSchemaResolver` para RHF+Zod v4, router/Zustand diferidos   |
