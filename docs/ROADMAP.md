@@ -57,7 +57,7 @@ Tareas:
 - [x] Esquema SQLite: `Project`, `Worktree`, `LogEntry` (tablas `projects`, `worktrees`, `log_entries`)
 - [x] Migraciones (`apps/server/src/db/migrate.ts`, runner propio — ver [ADR-0001](./adr/0001-esquema-datos-y-migraciones-sqlite.md))
 
-**DoD**: al arrancar `apps/server`, `~/.worktrees-manager/registry.db` tiene las tablas `projects`, `worktrees` y `log_entries` creadas (verificado también en un test Vitest, `apps/server/src/db/migrate.test.ts`), y volver a aplicar las migraciones no falla ni las duplica. **Cumplido**, verificado con test automatizado y ejecución manual contra el registro real.
+**DoD**: al arrancar `apps/server`, `~/.worktrees-manager/registry.db` tiene las tablas `projects`, `worktrees` y `log_entries` creadas, y volver a aplicar las migraciones no falla ni las duplica. **Cumplido**: la lógica de migración (creación de tablas, idempotencia, atomicidad ante un fallo a mitad) está cubierta por tests Vitest (`apps/server/src/db/migrate.test.ts`, contra una base en memoria); el enlace con el registro real (`openRegistry()` → `~/.worktrees-manager/registry.db`) se verificó manualmente.
 
 **Adenda (2026-07-16)**:
 

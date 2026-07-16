@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { runMigrations } from "./migrate.js";
+import type { Migration } from "./migrations.js";
 
 describe("runMigrations", () => {
   let db: Database.Database;
@@ -34,7 +35,7 @@ describe("runMigrations", () => {
     expect(appliedMigrations).toHaveLength(1);
   });
 
-  it("should allow inserting a project, a worktree referencing it, and a log entry referencing the worktree", () => {
+  it("should persist a project, a worktree and a log entry when they reference each other via valid foreign keys", () => {
     runMigrations(db);
 
     const projectId = randomUUID();
@@ -70,7 +71,7 @@ describe("runMigrations", () => {
     expect(logEntryCount).toEqual({ count: 1 });
   });
 
-  it("should reject a log entry with a stream value outside stdout/stderr", () => {
+  it("should reject a log entry when its stream value is outside stdout/stderr", () => {
     runMigrations(db);
 
     const projectId = randomUUID();
@@ -91,5 +92,31 @@ describe("runMigrations", () => {
         .prepare(`INSERT INTO log_entries (worktree_id, stream, content) VALUES (?, ?, ?)`)
         .run(worktreeId, "invalid-stream", "..."),
     ).toThrow();
+  });
+
+  it("should leave no trace of a migration when its SQL fails partway through", () => {
+    runMigrations(db);
+
+    const brokenMigration: Migration = {
+      name: "9999_broken",
+      up: `
+        CREATE TABLE partially_created (id INTEGER PRIMARY KEY);
+        CREATE TABLE this is not valid sql;
+      `,
+    };
+
+    expect(() => runMigrations(db, [brokenMigration])).toThrow();
+
+    const appliedMigrationNames = db
+      .prepare<[], { name: string }>("SELECT name FROM schema_migrations")
+      .all()
+      .map((row) => row.name);
+    const tableNames = db
+      .prepare<[], { name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((row) => row.name);
+
+    expect(appliedMigrationNames).not.toContain("9999_broken");
+    expect(tableNames).not.toContain("partially_created");
   });
 });

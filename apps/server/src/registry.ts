@@ -16,7 +16,14 @@ const REGISTRY_DB_PATH = join(REGISTRY_DIR, "registry.db");
 export function openRegistry(): Database.Database {
   mkdirSync(REGISTRY_DIR, { recursive: true });
   const db = new Database(REGISTRY_DB_PATH);
-  runMigrations(db);
+
+  try {
+    runMigrations(db);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+
   return db;
 }
 
