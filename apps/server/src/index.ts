@@ -1,16 +1,13 @@
-import Fastify from "fastify";
 import { Server } from "socket.io";
 
+import { buildApp } from "./app.js";
 import { openRegistry } from "./registry.js";
 
 const PORT = Number(process.env.PORT ?? 4100);
 
-const app = Fastify({ logger: true });
-
-app.get("/health", async () => ({ status: "ok" }));
-
 async function start(): Promise<void> {
   const registry = openRegistry();
+  const app = buildApp(registry);
 
   app.addHook("onClose", async () => {
     registry.close();
@@ -28,6 +25,6 @@ async function start(): Promise<void> {
 }
 
 start().catch((error: unknown) => {
-  app.log.error(error);
+  console.error(error);
   process.exit(1);
 });

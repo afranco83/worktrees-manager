@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 2 — Modelo de datos y persistencia, cerrada el 2026-07-16**; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 3 — Gestión de proyectos, cerrada el 2026-07-16**; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -67,17 +67,24 @@ Tareas:
 
 ---
 
-## Fase 3 — Gestión de proyectos
+## Fase 3 — Gestión de proyectos _(cerrada — 2026-07-16)_
 
 **Objetivo**: alta/gestión de proyectos 100% desde la UI.
 
 Tareas:
 
-- [ ] CRUD de proyectos desde la UI
-- [ ] Lectura/escritura de `.worktrees-manager.json`
-- [ ] Alta de proyecto (autorelleno si el fichero existe, creación si no)
+- [x] CRUD de proyectos desde la UI (`apps/server/src/projects/`, API REST + `apps/dashboard/src/features/projects/`)
+- [x] Lectura/escritura de `.worktrees-manager.json` (`apps/server/src/projects/config-file.ts`)
+- [x] Alta de proyecto (autorelleno vía `GET /api/projects/lookup` si el fichero existe, creación si no)
 
-**DoD**: a definir al cerrar Fase 2.
+**DoD**: se puede añadir/editar/borrar un proyecto desde el dashboard sin tocar la terminal. **Cumplido**: 29 tests backend (`apps/server`, esquema+migraciones+dominio `projects`, `fastify.inject()`) + 10 tests frontend (`apps/dashboard`, primera vez que se ejecuta Vitest+Testing Library+MSW ahí) en verde; flujo completo (alta con autorelleno, edición con reescritura del fichero, borrado sin tocar el fichero) verificado manualmente en navegador con Playwright contra ambos servidores reales y un repo git de prueba.
+
+**Adenda (2026-07-16)**:
+
+- Primer dominio de negocio de punta a punta: backend organizado en plugins Fastify por dominio (`schemas.ts`/`repository.ts`/`plugin.ts`), Zod vía `fastify-type-provider-zod`, errores de dominio centralizados en `setErrorHandler` (`apps/server/src/app.ts`, extraído de `index.ts` para poder testear con `fastify.inject()`).
+- Primera UI real del dashboard: Tailwind v4 + shadcn/ui, TanStack Query, React Hook Form + Zod, `src/features/projects/`. Decisiones documentadas en [ADR-0002](./adr/0002-stack-ui-fase-3.md): preset `base-nova` de shadcn, `standardSchemaResolver` (no `zodResolver`) para RHF+Zod v4, `react-router`/Zustand diferidos a cuando haga falta una segunda vista/estado compartido real.
+- **Bug real encontrado en la verificación manual en navegador** (no lo cubría ningún test, porque MSW no replica el parseo de body de Fastify): `apiRequest` (`apps/dashboard/src/lib/api-client.ts`) enviaba siempre `Content-Type: application/json` aunque la petición no tuviera cuerpo (`DELETE`), y Fastify rechazaba esas peticiones con 400/500 (`FST_ERR_CTP_EMPTY_JSON_BODY`). Corregido condicionando la cabecera a la presencia de `body`, con test de regresión (`api-client.test.ts`) que verifica las cabeceras reales por método.
+- `docs/ARCHITECTURE.md` §2/§3 actualizado para reflejar el stack y la estructura por dominio ya implementados (antes solo declaraban la intención).
 
 ---
 

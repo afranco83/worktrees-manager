@@ -36,15 +36,24 @@ No hay `packages/*` compartidos en v1: `dashboard` y `server` no comparten códi
 ## 2. Frontend (`apps/dashboard`)
 
 - Vite + React + TypeScript, sin SSR (SPA pura — no hay necesidad de SEO/indexación, es una herramienta local).
+- **Organización por dominio**: `src/features/<dominio>/` (`api/` hooks de TanStack Query + funciones fetch, `components/`, `schemas.ts`), empezando por `features/projects` (Fase 3). `src/components/ui/` es el design system (shadcn/ui), ciego al dominio.
 - **Estado servidor**: TanStack Query contra la API REST de `apps/server` (proyectos, worktrees, estado de PRs).
-- **Estado cliente**: Zustand para estado de UI puro (paneles abiertos, filtros, selección activa).
-- **Tiempo real**: cliente de Socket.io suscrito a los eventos de logs/estado que emite `apps/server`.
-- **Estilos**: Tailwind CSS + shadcn/ui (componentes copiados/adaptados, no una dependencia de runtime).
+- **Estado cliente**: Zustand para estado de UI puro (paneles abiertos, filtros, selección activa) — todavía no introducido: la Fase 3 solo necesita "qué diálogo está abierto", cubierto con `useState` local en `ProjectsPage`; se añade Zustand cuando aparezca estado de UI real compartido entre componentes no relacionados.
+- **Routing**: sin `react-router` todavía — una única vista (`ProjectsPage`). Se introduce en la fase que añada una segunda vista real (worktrees por proyecto, Fase 4+), envolviendo lo ya construido sin reescrituras.
+- **Formularios**: React Hook Form + Zod. El resolver es `standardSchemaResolver` de `@hookform/resolvers/standard-schema` (no `zodResolver` de `@hookform/resolvers/zod`, que en la versión instalada asume la forma interna de Zod v3) — Zod v4 implementa el estándar [Standard Schema](https://github.com/standard-schema/standard-schema) y ese es el resolver soportado. Con validaciones `z.coerce`, `useForm` se tipa `<InputSchema, unknown, OutputSchema>` (vía `z.input`/`z.output`), no con un único tipo — RHF necesita distinguir el shape crudo del campo (antes de coercionar) del shape ya parseado que recibe el `onSubmit`.
+- **Tiempo real**: cliente de Socket.io suscrito a los eventos de logs/estado que emite `apps/server` (a partir de Fase 5).
+- **Estilos**: Tailwind CSS v4 (`@tailwindcss/vite`) + shadcn/ui, estilo `base-nova` (primitivos headless `@base-ui/react`, no Radix). Los componentes de `src/components/ui/` se copian/adaptan (no son una dependencia de runtime), pero el estilo `base-nova` sí trae un paquete `shadcn` con el reset/tokens CSS base como dependencia — es el propio CLI oficial el que lo resuelve así, no una elección nuestra que contradiga el principio.
+- **Cliente HTTP**: `src/lib/api-client.ts` (`apiRequest`), sin librería — `fetch` nativo con manejo de errores (`ApiError`) y parseo de body condicionado al método/presencia de body (un `Content-Type: application/json` en una petición sin cuerpo, p. ej. `DELETE`, hace que Fastify la rechace con 400/500).
+- **Proxy de dev**: `vite.config.ts` → `server.proxy["/api"]` hacia `apps/server` (evita CORS en desarrollo sin añadir `@fastify/cors`; en producción, Fase 8 probablemente sirva ambos desde el mismo origen).
 - **Variables de entorno**: `import.meta.env`, nunca `process.env` (diferencia clave frente a un proyecto Next.js).
+- **Testing**: Vitest + Testing Library + MSW (`src/test/`), introducido en Fase 3 junto con la primera feature real.
 
 ## 3. Backend (`apps/server`)
 
 - Fastify como servidor HTTP (API REST) + adaptador de Socket.io sobre el mismo servidor HTTP para el canal de tiempo real.
+- **Fábrica de la app** (`src/app.ts`, `buildApp(db)`): separa la construcción de la instancia Fastify (type provider Zod, decorator `fastify.db`, registro de plugins de dominio, `setErrorHandler`) del arranque real (`src/index.ts`, que solo añade `openRegistry()` + `app.listen()`) — necesario para testear rutas con `fastify.inject()` sin levantar un puerto real.
+- **Organización por dominio**: cada dominio de negocio es una carpeta con su propio `schemas.ts` (Zod), `repository.ts` (acceso a SQLite), y `plugin.ts` (rutas Fastify), empezando por `src/projects/` (Fase 3). Validación Zod vía `fastify-type-provider-zod`.
+- **Errores de dominio** (`src/errors.ts`): clases propias (`NotFoundError`, `DuplicateProjectPathError`, etc.) mapeadas a status HTTP en el único `setErrorHandler` de `app.ts` — nunca `try/catch` repetido por ruta para el caso genérico.
 - **Gestión de procesos hijos**: arranque/parada del comando de dev de cada worktree vía `execa` (o `child_process` si `execa` no aporta valor real sobre él), con el puerto asignado inyectado como variable de entorno al proceso.
 - **Operaciones git**: `simple-git` (o `execa` invocando el `git` del sistema directamente) para `worktree add/remove`, `status --porcelain`. Nunca se reimplementa lógica de git en JS.
 - **Integración PRs**: invocación de `gh` (CLI) vía `execa`, asumiendo sesión ya autenticada en la máquina — sin gestión de tokens propia.
