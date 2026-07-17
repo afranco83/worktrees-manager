@@ -9,8 +9,6 @@ export const CONFIG_FILE_NAME = ".worktrees-manager.json";
 
 export const projectConfigFileSchema = z.object({
   devCommand: z.string().min(1),
-  portRangeStart: z.number().int().positive(),
-  portRangeEnd: z.number().int().positive(),
 });
 
 export type ProjectConfigFile = z.infer<typeof projectConfigFileSchema>;

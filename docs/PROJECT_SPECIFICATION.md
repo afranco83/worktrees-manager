@@ -19,8 +19,8 @@ No es una herramienta genérica para cualquier stack: se optimiza para el flujo 
 - Se pueden registrar N repositorios locales ("proyectos") en el dashboard, cada uno con:
   - Ruta local al repo principal.
   - Comando de arranque del entorno de desarrollo (ej. `npm run dev`, `pnpm dev`), parametrizable con el puerto asignado.
-  - Rango de puertos a usar para sus worktrees (ej. 3000–3099).
-- **Alta 100% desde la UI**: un botón "+ Añadir proyecto" abre un formulario para indicar la ruta local. Si el repo ya tiene un `.worktrees-manager.json` (ver más abajo), se autorellenan comando de arranque y rango de puertos; si no existe, se rellenan una vez y la propia app escribe el fichero en el repo. Ninguna acción del día a día (añadir proyecto, crear/borrar worktree, levantar/parar entorno) requiere recordar comandos: todo son CTAs del dashboard.
+- El rango de puertos para asignar a los worktrees es **único y global para toda la app** (no por proyecto), configurable en un apartado de ajustes globales — cada worktree nuevo toma cualquier puerto libre de ese rango, sin importar a qué proyecto pertenezca.
+- **Alta 100% desde la UI**: un botón "+ Añadir proyecto" abre un formulario para indicar la ruta local. Si el repo ya tiene un `.worktrees-manager.json` (ver más abajo), se autorellena el comando de arranque; si no existe, se rellena una vez y la propia app escribe el fichero en el repo. Ninguna acción del día a día (añadir proyecto, crear/borrar worktree, levantar/parar entorno) requiere recordar comandos: todo son CTAs del dashboard.
 
 ### 2.2 Ciclo de vida de un worktree
 
@@ -63,24 +63,26 @@ La app corre siempre en local (tu máquina), pero gestiona N proyectos a la vez 
 
 - **Distribución**: paquete npm, ejecutable con `npx worktrees-manager` (sin instalación permanente) o instalado globalmente (`npm i -g worktrees-manager`). Arranca el servidor local y sirve el dashboard en `localhost:PUERTO`.
 - **Registro central**: `~/.worktrees-manager/` (fuera de cualquier repo gestionado) guarda en SQLite qué rutas de proyecto están dadas de alta, sus worktrees, puertos asignados y logs. Detalle técnico en `ARCHITECTURE.md` §4.
-- **Config por proyecto versionada**: cada repo gestionado puede tener un `.worktrees-manager.json` en su raíz con el comando de arranque y el rango de puertos. Al añadir un proyecto desde la UI, si el fichero ya existe se lee y autorellena el formulario; si no existe, la app lo crea a partir de lo que rellenes. Ventaja: la config viaja con el repo (útil entre máquinas), en vez de vivir solo en la BD local del dashboard.
+- **Config por proyecto versionada**: cada repo gestionado puede tener un `.worktrees-manager.json` en su raíz con el comando de arranque. Al añadir un proyecto desde la UI, si el fichero ya existe se lee y autorellena el formulario; si no existe, la app lo crea a partir de lo que rellenes. Ventaja: la config viaja con el repo (útil entre máquinas), en vez de vivir solo en la BD local del dashboard.
+- **Ajustes globales de la app** (no versionados, viven solo en el registro central): rango de puertos único para todos los worktrees y comando de terminal preferido para "abrir terminal" — ver `ARCHITECTURE.md` §5.
 - **Arranque del propio dashboard**: única acción que sigue requiriendo un comando (`npx worktrees-manager`), ya que es un proceso de servidor que debe estar corriendo. Auto-arranque como servicio en segundo plano (launchd/systemd) queda como mejora futura, no como requisito de la v1.
 
 ## 5. Stack Tecnológico
 
-| Categoría                  | Tecnología                                                              | Justificación                                                                                       |
-| -------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Forma de la app            | Web app local (navegador, `localhost:PUERTO`)                           | Evita la complejidad de empaquetado de Tauri/Electron; encaja con el stack habitual del autor.      |
-| Frontend                   | Vite + React + TypeScript                                               | Stack habitual del autor, sin necesidad de SSR/SEO que justifique Next.js.                          |
-| Estilos / UI               | Tailwind CSS + shadcn/ui                                                | Componentes con buen aspecto sin inversión de diseño dedicada.                                      |
-| Backend                    | Node.js + Fastify                                                       | Expone la API REST y gestiona procesos hijos (arranque/parada de entornos).                         |
-| Tiempo real (logs, estado) | WebSockets (Socket.io)                                                  | Streaming de logs y actualizaciones de estado sin polling agresivo desde el cliente.                |
-| Persistencia               | SQLite (`better-sqlite3`)                                               | Fichero local único, sin servidor de BD, suficiente para proyectos/worktrees/puertos/logs.          |
-| Operaciones git            | `simple-git` / `execa` sobre el `git` del sistema                       | Evita reimplementar git; delega en el binario real instalado.                                       |
-| Gestión de puertos         | Comprobación de rango reservado + verificación real (ej. `detect-port`) | Evita colisiones tanto entre worktrees como con otros procesos del sistema.                         |
-| Integración PRs            | GitHub CLI (`gh`)                                                       | Sin gestión de tokens propios; se apoya en la sesión ya autenticada del usuario.                    |
-| Alta de proyectos          | 100% desde la UI (sin CLI de por medio)                                 | Prioridad de UX: nada de comandos que memorizar para el uso del día a día, todo con botones/CTAs.   |
-| Config por proyecto        | Fichero versionado `.worktrees-manager.json` en la raíz de cada repo    | Viaja con el repo entre máquinas; la app lo lee/escribe desde la UI, el usuario no lo edita a mano. |
+| Categoría                  | Tecnología                                                              | Justificación                                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Forma de la app            | Web app local (navegador, `localhost:PUERTO`)                           | Evita la complejidad de empaquetado de Tauri/Electron; encaja con el stack habitual del autor.                 |
+| Frontend                   | Vite + React + TypeScript                                               | Stack habitual del autor, sin necesidad de SSR/SEO que justifique Next.js.                                     |
+| Estilos / UI               | Tailwind CSS + shadcn/ui                                                | Componentes con buen aspecto sin inversión de diseño dedicada.                                                 |
+| Backend                    | Node.js + Fastify                                                       | Expone la API REST y gestiona procesos hijos (arranque/parada de entornos).                                    |
+| Tiempo real (logs, estado) | WebSockets (Socket.io)                                                  | Streaming de logs y actualizaciones de estado sin polling agresivo desde el cliente.                           |
+| Persistencia               | SQLite (`better-sqlite3`)                                               | Fichero local único, sin servidor de BD, suficiente para proyectos/worktrees/puertos/logs.                     |
+| Operaciones git            | `simple-git` / `execa` sobre el `git` del sistema                       | Evita reimplementar git; delega en el binario real instalado.                                                  |
+| Gestión de puertos         | Comprobación de rango reservado + verificación real (ej. `detect-port`) | Evita colisiones tanto entre worktrees como con otros procesos del sistema.                                    |
+| Integración PRs            | GitHub CLI (`gh`)                                                       | Sin gestión de tokens propios; se apoya en la sesión ya autenticada del usuario.                               |
+| Alta de proyectos          | 100% desde la UI (sin CLI de por medio)                                 | Prioridad de UX: nada de comandos que memorizar para el uso del día a día, todo con botones/CTAs.              |
+| Config por proyecto        | Fichero versionado `.worktrees-manager.json` en la raíz de cada repo    | Viaja con el repo entre máquinas; la app lo lee/escribe desde la UI, el usuario no lo edita a mano.            |
+| Ajustes globales           | Fila única en el mismo SQLite del registro central                      | Rango de puertos y terminal preferida no son propiedad de ningún repo — no tiene sentido versionarlos con uno. |
 
 Detalle de cómo se conectan estas piezas (estructura de carpetas, esquema de datos, diagramas) en `ARCHITECTURE.md`.
 
@@ -88,7 +90,7 @@ Detalle de cómo se conectan estas piezas (estructura de carpetas, esquema de da
 
 - Detección automática de la PR asociada por nombre de rama (sin asociación manual).
 - Notificaciones cuando cambia el estado de una PR (mergeada, con nuevos comentarios, CI en rojo).
-- Plantillas de proyecto reutilizables (comando de arranque, rango de puertos) para añadir nuevos repos más rápido.
+- Plantillas de proyecto reutilizables (comando de arranque) para añadir nuevos repos más rápido.
 - Atajos para abrir el worktree en el editor (VS Code, etc.) directamente desde el dashboard.
 - Métricas simples: tiempo de vida medio de un worktree, nº de worktrees activos a lo largo del tiempo.
 - Auto-arranque del dashboard como servicio en segundo plano (launchd/systemd) al iniciar sesión.

@@ -8,15 +8,25 @@ import {
 } from "fastify-type-provider-zod";
 
 import {
+  BranchAlreadyExistsError,
+  CurrentBranchNotFoundError,
+  DefaultBranchNotFoundError,
   DuplicateProjectPathError,
   ForbiddenDirectoryPathError,
+  GitWorktreeOperationError,
+  InvalidBranchNameError,
   InvalidDirectoryPathError,
   InvalidProjectConfigFileError,
   InvalidProjectPathError,
+  NoFreePortAvailableError,
   NotFoundError,
+  TerminalLaunchError,
+  WorktreeHasUncommittedChangesError,
 } from "./errors.js";
 import { filesystemPlugin } from "./filesystem/plugin.js";
 import { projectsPlugin } from "./projects/plugin.js";
+import { settingsPlugin } from "./settings/plugin.js";
+import { worktreesPlugin } from "./worktrees/plugin.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -49,6 +59,8 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
 
   app.register(projectsPlugin, { prefix: "/api/projects" });
   app.register(filesystemPlugin, { prefix: "/api/filesystem/directories" });
+  app.register(worktreesPlugin, { prefix: "/api" });
+  app.register(settingsPlugin, { prefix: "/api/settings" });
 
   app.setErrorHandler((error, request, reply) => {
     if (hasZodFastifySchemaValidationErrors(error)) {
@@ -66,7 +78,12 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
       return;
     }
 
-    if (error instanceof DuplicateProjectPathError) {
+    if (
+      error instanceof DuplicateProjectPathError ||
+      error instanceof BranchAlreadyExistsError ||
+      error instanceof WorktreeHasUncommittedChangesError ||
+      error instanceof NoFreePortAvailableError
+    ) {
       sendErrorResponse({ reply, statusCode: 409, error: "Conflict", message: error.message });
       return;
     }
@@ -79,8 +96,27 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
     if (
       error instanceof InvalidProjectPathError ||
       error instanceof InvalidProjectConfigFileError ||
-      error instanceof InvalidDirectoryPathError
+      error instanceof InvalidDirectoryPathError ||
+      error instanceof InvalidBranchNameError ||
+      error instanceof DefaultBranchNotFoundError ||
+      error instanceof CurrentBranchNotFoundError
     ) {
+      sendErrorResponse({
+        reply,
+        statusCode: 422,
+        error: "Unprocessable Entity",
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error instanceof GitWorktreeOperationError || error instanceof TerminalLaunchError) {
+      // A diferencia de los 422 de validación de arriba, este es el fallback
+      // genérico de un fallo real de `git`/del sistema (disco lleno, permisos,
+      // .git corrupto, ningún emulador de terminal soportado...) — se loguea
+      // igual que un 500 para no perder visibilidad operativa, aunque el
+      // status que ve el cliente siga siendo 422.
+      request.log.error(error);
       sendErrorResponse({
         reply,
         statusCode: 422,

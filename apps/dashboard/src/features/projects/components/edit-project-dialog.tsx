@@ -15,12 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { useUpdateProject } from "../api/use-update-project";
-import {
-  updateProjectFormSchema,
-  type Project,
-  type UpdateProjectFormInput,
-  type UpdateProjectFormValues,
-} from "../schemas";
+import { updateProjectFormSchema, type Project, type UpdateProjectFormValues } from "../schemas";
 
 export function EditProjectDialog({
   project,
@@ -38,24 +33,14 @@ export function EditProjectDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<UpdateProjectFormInput, unknown, UpdateProjectFormValues>({
+  } = useForm<UpdateProjectFormValues>({
     resolver: standardSchemaResolver(updateProjectFormSchema),
-    defaultValues: {
-      name: project.name,
-      devCommand: project.devCommand,
-      portRangeStart: project.portRangeStart,
-      portRangeEnd: project.portRangeEnd,
-    },
+    defaultValues: { name: project.name, devCommand: project.devCommand },
   });
 
   useEffect(() => {
     if (open) {
-      reset({
-        name: project.name,
-        devCommand: project.devCommand,
-        portRangeStart: project.portRangeStart,
-        portRangeEnd: project.portRangeEnd,
-      });
+      reset({ name: project.name, devCommand: project.devCommand });
     }
   }, [open, project, reset]);
 
@@ -106,39 +91,6 @@ export function EditProjectDialog({
                 {errors.devCommand.message}
               </p>
             )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="edit-portRangeStart">Puerto inicial</Label>
-              <Input
-                id="edit-portRangeStart"
-                type="number"
-                aria-invalid={errors.portRangeStart != null}
-                aria-describedby={errors.portRangeStart ? "edit-portRangeStart-error" : undefined}
-                {...register("portRangeStart")}
-              />
-              {errors.portRangeStart && (
-                <p id="edit-portRangeStart-error" className="text-sm text-destructive">
-                  {errors.portRangeStart.message}
-                </p>
-              )}
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="edit-portRangeEnd">Puerto final</Label>
-              <Input
-                id="edit-portRangeEnd"
-                type="number"
-                aria-invalid={errors.portRangeEnd != null}
-                aria-describedby={errors.portRangeEnd ? "edit-portRangeEnd-error" : undefined}
-                {...register("portRangeEnd")}
-              />
-              {errors.portRangeEnd && (
-                <p id="edit-portRangeEnd-error" className="text-sm text-destructive">
-                  {errors.portRangeEnd.message}
-                </p>
-              )}
-            </div>
           </div>
 
           {updateProject.isError && (

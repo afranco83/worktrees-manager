@@ -2,28 +2,86 @@ import { http, HttpResponse } from "msw";
 import { z } from "zod";
 
 import type { Project } from "@/features/projects/schemas";
+import type { AppSettings, TerminalOption } from "@/features/settings/schemas";
+import type { ProjectGitInfo, Worktree } from "@/features/worktrees/schemas";
 
 const createProjectRequestSchema = z.object({
   localPath: z.string(),
   name: z.string(),
   devCommand: z.string(),
-  portRangeStart: z.number(),
-  portRangeEnd: z.number(),
 });
 
 const updateProjectRequestSchema = z
   .object({
     name: z.string(),
     devCommand: z.string(),
+  })
+  .partial();
+
+const updateSettingsRequestSchema = z
+  .object({
+    preferredTerminalCommand: z.string().nullable(),
     portRangeStart: z.number(),
     portRangeEnd: z.number(),
   })
   .partial();
 
+const FAKE_TERMINAL_PRESETS: TerminalOption[] = [
+  { name: "Terminal", command: "open -a Terminal {path}" },
+  { name: "iTerm2", command: "open -a iTerm {path}" },
+];
+
+export let settingsStore: AppSettings = {
+  preferredTerminalCommand: null,
+  portRangeStart: 3000,
+  portRangeEnd: 3999,
+};
+
+export function resetSettingsStore(): void {
+  settingsStore = { preferredTerminalCommand: null, portRangeStart: 3000, portRangeEnd: 3999 };
+}
+
 export let projectsStore: Project[] = [];
 
 export function resetProjectsStore(initialProjects: Project[] = []): void {
   projectsStore = [...initialProjects];
+}
+
+function requirePathParam(value: string | readonly string[] | undefined): string {
+  if (typeof value !== "string") {
+    throw new Error("Se esperaba un único parámetro de ruta");
+  }
+
+  return value;
+}
+
+const createWorktreeRequestSchema = z.object({
+  newBranch: z.string(),
+  base: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("default") }),
+    z.object({ type: z.literal("current") }),
+    z.object({ type: z.literal("branch"), branch: z.string() }),
+  ]),
+});
+
+const DEFAULT_GIT_INFO: ProjectGitInfo = {
+  currentBranch: "main",
+  defaultBranch: "main",
+  branches: ["main"],
+};
+
+export let worktreesStore: Record<string, Worktree[]> = {};
+export let gitInfoStore: Record<string, ProjectGitInfo> = {};
+let nextWorktreePort = 4100;
+
+export function resetWorktreesStore(): void {
+  worktreesStore = {};
+  gitInfoStore = {};
+  nextWorktreePort = 4100;
+}
+
+export function setProjectGitInfo(projectId: string, gitInfo: ProjectGitInfo): void {
+  gitInfoStore = { ...gitInfoStore, [projectId]: gitInfo };
 }
 
 export const FAKE_HOME = "/home/test";
@@ -107,6 +165,113 @@ export const handlers = [
       configFile: null,
     });
   }),
+
+  http.get("/api/projects/:projectId/git-info", ({ params }) => {
+    const projectId = requirePathParam(params.projectId);
+
+    return HttpResponse.json(gitInfoStore[projectId] ?? DEFAULT_GIT_INFO);
+  }),
+
+  http.get("/api/projects/:projectId/worktrees", ({ params }) => {
+    const projectId = requirePathParam(params.projectId);
+
+    return HttpResponse.json(worktreesStore[projectId] ?? []);
+  }),
+
+  http.post("/api/projects/:projectId/worktrees", async ({ params, request }) => {
+    const projectId = requirePathParam(params.projectId);
+    const body = createWorktreeRequestSchema.parse(await request.json());
+    const existing = worktreesStore[projectId] ?? [];
+
+    if (existing.some((worktree) => worktree.branch === body.newBranch)) {
+      return HttpResponse.json(
+        { error: "Conflict", message: `La rama "${body.newBranch}" ya existe`, statusCode: 409 },
+        { status: 409 },
+      );
+    }
+
+    const worktree: Worktree = {
+      id: crypto.randomUUID(),
+      projectId,
+      branch: body.newBranch,
+      path: `/repos/project/.worktrees/${body.newBranch}`,
+      port: nextWorktreePort,
+      processStatus: "stopped",
+      pid: null,
+      prNumber: null,
+      createdAt: new Date().toISOString(),
+    };
+    nextWorktreePort += 1;
+
+    worktreesStore = { ...worktreesStore, [projectId]: [...existing, worktree] };
+
+    return HttpResponse.json(worktree, { status: 201 });
+  }),
+
+  http.delete("/api/worktrees/:id", ({ params, request }) => {
+    const id = requirePathParam(params.id);
+    const force = new URL(request.url).searchParams.get("force") === "true";
+
+    for (const [projectId, worktrees] of Object.entries(worktreesStore)) {
+      const worktree = worktrees.find((candidate) => candidate.id === id);
+
+      if (!worktree) {
+        continue;
+      }
+
+      if (worktree.branch.includes("dirty") && !force) {
+        return HttpResponse.json(
+          {
+            error: "Conflict",
+            message: "El worktree tiene cambios sin commitear o ficheros sin seguimiento",
+            statusCode: 409,
+          },
+          { status: 409 },
+        );
+      }
+
+      worktreesStore = {
+        ...worktreesStore,
+        [projectId]: worktrees.filter((candidate) => candidate.id !== id),
+      };
+
+      return new HttpResponse(null, { status: 204 });
+    }
+
+    return HttpResponse.json(
+      { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+      { status: 404 },
+    );
+  }),
+
+  http.post("/api/worktrees/:id/open-terminal", ({ params }) => {
+    const id = requirePathParam(params.id);
+    const exists = Object.values(worktreesStore).some((worktrees) =>
+      worktrees.some((worktree) => worktree.id === id),
+    );
+
+    if (!exists) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get("/api/settings", () => HttpResponse.json(settingsStore)),
+
+  http.patch("/api/settings", async ({ request }) => {
+    const patch = updateSettingsRequestSchema.parse(await request.json());
+    settingsStore = { ...settingsStore, ...patch };
+
+    return HttpResponse.json(settingsStore);
+  }),
+
+  http.get("/api/settings/terminal-presets", () =>
+    HttpResponse.json({ platform: "darwin", presets: FAKE_TERMINAL_PRESETS }),
+  ),
 
   http.get("/api/filesystem/directories", ({ request }) => {
     const path = new URL(request.url).searchParams.get("path") || FAKE_HOME;

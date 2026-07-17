@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { runMigrations } from "./migrate.js";
-import type { Migration } from "./migrations.js";
+import { migrations, type Migration } from "./migrations.js";
 
 describe("runMigrations", () => {
   let db: Database.Database;
@@ -26,13 +26,23 @@ describe("runMigrations", () => {
     );
   });
 
+  it("should seed a single app_settings row with sensible defaults", () => {
+    runMigrations(db);
+
+    const rows = db.prepare("SELECT * FROM app_settings").all();
+
+    expect(rows).toEqual([
+      { id: 1, preferred_terminal_command: null, port_range_start: 3000, port_range_end: 3999 },
+    ]);
+  });
+
   it("should not fail nor duplicate migration records when run more than once", () => {
     runMigrations(db);
     runMigrations(db);
 
     const appliedMigrations = db.prepare("SELECT name FROM schema_migrations").all();
 
-    expect(appliedMigrations).toHaveLength(1);
+    expect(appliedMigrations).toHaveLength(migrations.length);
   });
 
   it("should persist a project, a worktree and a log entry when they reference each other via valid foreign keys", () => {
@@ -42,9 +52,9 @@ describe("runMigrations", () => {
     const worktreeId = randomUUID();
 
     db.prepare(
-      `INSERT INTO projects (id, name, local_path, dev_command, port_range_start, port_range_end)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev", 3000, 3099);
+      `INSERT INTO projects (id, name, local_path, dev_command)
+       VALUES (?, ?, ?, ?)`,
+    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev");
 
     db.prepare(
       `INSERT INTO worktrees (id, project_id, branch, path, port)
@@ -78,9 +88,9 @@ describe("runMigrations", () => {
     const worktreeId = randomUUID();
 
     db.prepare(
-      `INSERT INTO projects (id, name, local_path, dev_command, port_range_start, port_range_end)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev", 3000, 3099);
+      `INSERT INTO projects (id, name, local_path, dev_command)
+       VALUES (?, ?, ?, ?)`,
+    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev");
 
     db.prepare(
       `INSERT INTO worktrees (id, project_id, branch, path, port)

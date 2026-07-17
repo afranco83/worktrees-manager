@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 3 — Gestión de proyectos, cerrada el 2026-07-16**; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 4 — Ciclo de vida de worktrees, cerrada el 2026-07-16**; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -87,25 +87,40 @@ Tareas:
 - `docs/ARCHITECTURE.md` §2/§3 actualizado para reflejar el stack y la estructura por dominio ya implementados (antes solo declaraban la intención).
 - **Pulido posterior al cierre**: explorador de carpetas reales para el alta de proyecto (`apps/server/src/filesystem/` + `apps/dashboard/src/features/filesystem/`, `GET /api/filesystem/directories`) — ni `<input type="file">` ni la File System Access API exponen la ruta absoluta real de una carpeta elegida en el navegador, así que el backend (con acceso pleno al filesystem de la máquina) es quien lista directorios para que el usuario navegue sin tener que teclear/pegar la ruta a mano. `CreateProjectDialog` implementa la navegación como dos **pasos dentro del mismo `Dialog`** (`step: "form" | "browse"`, sin anidar un segundo diálogo) a petición del usuario, tras probar primero un diálogo anidado — más simple visualmente y sin ambigüedad de foco/Escape entre dos modales abiertos a la vez.
 - **Dos controles añadidos a petición del usuario tras probar la primera versión**:
-  1. El resto del formulario (`Nombre`, `Comando de arranque`, rango de puertos, botón de envío) queda dentro de un `<fieldset disabled>` hasta que la ruta local se confirma como un repositorio git existente (vía `GET /api/projects/lookup`) — antes se podían rellenar esos campos con una ruta todavía sin validar.
+  1. El resto del formulario (`Nombre`, `Comando de arranque`, botón de envío) queda dentro de un `<fieldset disabled>` hasta que la ruta local se confirma como un repositorio git existente (vía `GET /api/projects/lookup`) — antes se podían rellenar esos campos con una ruta todavía sin validar.
   2. El explorador de carpetas (`GET /api/filesystem/directories`) solo permite navegar dentro del **home del usuario** (`realpathSync(homedir())`, resuelto también a través de symlinks para que no sirvan de escape) — devuelve 403 (`ForbiddenDirectoryPathError`) fuera de ese árbol. Relevante porque `apps/server` escucha en `0.0.0.0`, así que sin este límite el endpoint sería una forma de enumerar el filesystem completo de la máquina desde la red local. El campo de texto libre de "Ruta local" no lleva esta restricción (ahí el usuario escribe una ruta deliberada, que puede vivir fuera del home).
 - **Validación ampliada de "¿sirve esta carpeta para worktrees?"** (`apps/server/src/projects/repo-path.ts`, `inspectRepoPath`), a petición del usuario ("si hay más condiciones para que se pueda trabajar con worktree, inclúyelas"): además de ser un repositorio git, ahora comprueba que tenga **al menos un commit** (`git rev-parse --verify HEAD` vía `node:child_process`, primer uso real de git como subproceso en el repo, siguiendo `ARCHITECTURE.md` §3 — "nunca se reimplementa lógica de git en JS") — sin ningún commit no hay rama de la que crear un worktree — y que la carpeta tenga **permisos de escritura** (`git worktree add` necesita escribir metadatos en `.git/`). `GET /api/projects/lookup` devuelve estos motivos por separado (`hasCommits`, `isWritable`) y el formulario de alta muestra un mensaje distinto y accionable para cada caso, en vez de un genérico "ruta inválida".
 - 50 tests backend + 14 tests frontend en verde; verificado también manualmente en navegador (autorelleno de nombre/ruta, "Cancelar" vuelve al formulario, sin submits accidentales, campos bloqueados hasta confirmar la ruta, 403 real fuera del home, mensaje específico de "sin commits" y desbloqueo automático tras el primer commit).
 
 ---
 
-## Fase 4 — Ciclo de vida de worktrees
+## Fase 4 — Ciclo de vida de worktrees _(cerrada — 2026-07-16)_
 
 **Objetivo**: crear/borrar/listar worktrees con asignación automática de puerto.
 
 Tareas:
 
-- [ ] Crear worktree (`main`, rama concreta o rama actual)
-- [ ] Asignación automática de puerto libre
-- [ ] Borrar worktree (con confirmación)
-- [ ] Listado de worktrees por proyecto
+- [x] Crear worktree (rama por defecto, rama actual o rama concreta existente, siempre como base de una rama nueva — ver [ADR-0003](./adr/0003-ciclo-de-vida-de-worktrees.md))
+- [x] Asignación automática de puerto libre (sin colisiones entre worktrees del mismo proyecto ni a nivel de máquina)
+- [x] Borrar worktree (con confirmación, y "Forzar borrado" si hay cambios sin commitear)
+- [x] Listado de worktrees por proyecto
 
-**DoD**: a definir al cerrar Fase 3.
+**DoD**: desde la UI se crea/borra un worktree real en disco con puerto asignado sin colisiones. **Cumplido**: 41 tests backend nuevos (`apps/server/src/worktrees/`, git real contra repos temporales, incluida una prueba de concurrencia con dos altas simultáneas del mismo proyecto) + 4 tests frontend (`apps/dashboard/src/features/worktrees/`) en verde; verificado manualmente en navegador con Playwright contra un repo git de prueba real: alta desde rama por defecto (directorio y rama confirmados también por `git worktree list` en terminal), segunda alta del mismo proyecto con puerto distinto sin colisión, borrado normal de un worktree limpio, y borrado de un worktree con cambios sin commitear (falla con el mensaje esperado, "Forzar borrado" sí lo elimina).
+
+**Adenda (2026-07-16)**:
+
+- Segundo dominio de negocio de punta a punta (`apps/server/src/worktrees/`), mismo patrón que `projects` (Fase 3): `schemas.ts`/`repository.ts`/`plugin.ts`, más `git-worktree.ts` (git real vía `execa`, nueva dependencia — ver [ADR-0003](./adr/0003-ciclo-de-vida-de-worktrees.md)), `port-allocator.ts` (bind real + `EADDRINUSE`, sin `detect-port`) y `project-lock.ts` (cola de promesas en memoria por `projectId`, backstop de un índice `UNIQUE` en `worktrees.port` a nivel de SQLite).
+- **Bug real encontrado en la verificación manual en navegador** (no lo cubría ningún test): `deleteWorktreeQuerySchema` usaba `z.coerce.boolean()` para el query param `force`, y `z.coerce.boolean()` hace `Boolean(valor)` — como cualquier string no vacío es "truthy" en JS, `?force=false` se coaccionaba a `true` y el borrado normal forzaba siempre, sin importar el valor real del parámetro. Corregido con un `z.enum(["true", "false"]).default("false").transform(...)` que compara el texto en vez de coaccionar, con test de regresión explícito para `?force=false`.
+- **Segundo bug real encontrado en la misma verificación**: los mensajes de error de git (`git worktree remove`/`add`) salen localizados según el `LANG` del proceso (p. ej. `es_ES.UTF-8` → "no es un árbol de trabajo" en vez de "is not a working tree"), y `git-worktree.ts` distinguía los casos de dominio (rama ya existe, cambios sin commitear) haciendo matching por regex en inglés sobre ese stderr — así que en cualquier máquina con locale no inglés, todos los errores de git caían al genérico `GitWorktreeOperationError` (422) en vez de sus errores específicos (409), rompiendo en particular el flujo de "Forzar borrado". Corregido fijando `LC_ALL=C` en el entorno de cada proceso `git` invocado desde `execa`.
+- La política de "solo rama nueva por worktree" (nunca se hace checkout directo de una rama existente sin worktree) y el resto de decisiones de diseño (resolución de rama por defecto, convención de ruta en disco, estrategia de borrado ante worktree con cambios sin commitear o borrado a mano) están documentadas en [ADR-0003](./adr/0003-ciclo-de-vida-de-worktrees.md).
+- UI: nuevo primitivo shadcn `select`; `WorktreesDialog` reutiliza el patrón de "un único `Dialog` con pasos internos" de la Fase 3 (`"list" | "create" | {type: "delete", worktree}`) — el paso de borrado se implementó como contenido embebido en el mismo `Dialog` (no un `AlertDialog` anidado), para no reproducir el problema de doble backdrop que ese mismo patrón evitaba en la Fase 3.
+
+**Pulido posterior al cierre**:
+
+- **Navegación maestro-detalle** ([ADR-0004](./adr/0004-navegacion-maestro-detalle-con-router.md)): se sustituye la vista única con diálogos en cascada por `react-router` (proyecto seleccionado en la URL), sidebar de proyectos a la izquierda y panel de detalle a la derecha con la info del proyecto y sus worktrees en formato card; todos los CTA pasan a ser iconos con tooltip (`IconButton`, nuevo primitivo shadcn `tooltip`).
+- **Worktrees anidados + abrir terminal** ([ADR-0005](./adr/0005-worktrees-anidados-y-abrir-terminal.md)): los worktrees se crean dentro de `.worktrees/` del propio proyecto (antes hermano del repo, generaba desorden al navegar), con `.gitignore` gestionado automáticamente; nueva acción "Abrir terminal" en cada worktree, multiplataforma (macOS/Linux/Windows).
+- **Ajustes globales: terminal preferida + rango de puertos único** ([ADR-0006](./adr/0006-ajustes-globales-puertos-y-terminal.md)): a petición del usuario (usa iTerm2, no la terminal por defecto de macOS), "Abrir terminal" admite un comando preferido elegido de una lista curada por plataforma o uno personalizado, configurable en un nuevo apartado de ajustes globales; el rango de puertos por proyecto (ya vestigial desde que el índice de `worktrees.port` es global) se elimina en favor de un único rango global en ese mismo apartado. Corrección de concurrencia incluida: el lock de creación de worktree pasa de clave por proyecto a clave global, porque con rango global dos proyectos distintos sí pueden competir de verdad por el mismo puerto.
+- **Incidente operativo durante la verificación manual**: un `DELETE` por SQL directo contra el registro real (`~/.worktrees-manager/registry.db`), pensado para limpiar un proyecto de prueba, vació la tabla `projects` completa en vez de solo la fila objetivo. Los datos de git (repos/worktrees reales) no se vieron afectados, solo el registro; se recuperó re-dando de alta el proyecto real vía la propia API. Lección aplicada en adelante: cualquier limpieza de datos de prueba contra el registro real se hace únicamente a través de los endpoints HTTP de la propia app, nunca con SQL directo.
 
 ---
 

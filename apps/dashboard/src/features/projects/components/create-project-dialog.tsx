@@ -19,7 +19,6 @@ import { useCreateProject } from "../api/use-create-project";
 import { useProjectPathLookup } from "../api/use-project-path-lookup";
 import {
   createProjectFormSchema,
-  type CreateProjectFormInput,
   type CreateProjectFormValues,
   type ProjectPathLookup,
 } from "../schemas";
@@ -87,15 +86,9 @@ export function CreateProjectDialog({
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateProjectFormInput, unknown, CreateProjectFormValues>({
+  } = useForm<CreateProjectFormValues>({
     resolver: standardSchemaResolver(createProjectFormSchema),
-    defaultValues: {
-      localPath: "",
-      name: "",
-      devCommand: "",
-      portRangeStart: 3000,
-      portRangeEnd: 3099,
-    },
+    defaultValues: { localPath: "", name: "", devCommand: "" },
   });
 
   const watchedLocalPath = useWatch({ control, name: "localPath" });
@@ -130,8 +123,6 @@ export function CreateProjectDialog({
 
     if (lookup.configFile) {
       setValue("devCommand", lookup.configFile.devCommand);
-      setValue("portRangeStart", lookup.configFile.portRangeStart);
-      setValue("portRangeEnd", lookup.configFile.portRangeEnd);
     }
   }
 
@@ -178,8 +169,7 @@ export function CreateProjectDialog({
               <DialogTitle>Añadir proyecto</DialogTitle>
               <DialogDescription>
                 Indica la ruta local del repositorio. Si ya tiene un{" "}
-                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque y el
-                rango de puertos.
+                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque.
               </DialogDescription>
             </DialogHeader>
 
@@ -249,39 +239,6 @@ export function CreateProjectDialog({
                       {errors.devCommand.message}
                     </p>
                   )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="portRangeStart">Puerto inicial</Label>
-                    <Input
-                      id="portRangeStart"
-                      type="number"
-                      aria-invalid={errors.portRangeStart != null}
-                      aria-describedby={errors.portRangeStart ? "portRangeStart-error" : undefined}
-                      {...register("portRangeStart")}
-                    />
-                    {errors.portRangeStart && (
-                      <p id="portRangeStart-error" className="text-sm text-destructive">
-                        {errors.portRangeStart.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="portRangeEnd">Puerto final</Label>
-                    <Input
-                      id="portRangeEnd"
-                      type="number"
-                      aria-invalid={errors.portRangeEnd != null}
-                      aria-describedby={errors.portRangeEnd ? "portRangeEnd-error" : undefined}
-                      {...register("portRangeEnd")}
-                    />
-                    {errors.portRangeEnd && (
-                      <p id="portRangeEnd-error" className="text-sm text-destructive">
-                        {errors.portRangeEnd.message}
-                      </p>
-                    )}
-                  </div>
                 </div>
               </fieldset>
 

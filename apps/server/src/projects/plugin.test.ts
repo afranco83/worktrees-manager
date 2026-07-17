@@ -120,11 +120,7 @@ describe("projects plugin", () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({ name: input.name, localPath: repoPath });
-    expect(readProjectConfigFile(repoPath)).toEqual({
-      devCommand: input.devCommand,
-      portRangeStart: input.portRangeStart,
-      portRangeEnd: input.portRangeEnd,
-    });
+    expect(readProjectConfigFile(repoPath)).toEqual({ devCommand: input.devCommand });
   });
 
   it("should reject creating a project when the local path is not a git repository", async () => {
@@ -175,13 +171,7 @@ describe("projects plugin", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: {
-        localPath: "",
-        name: "",
-        devCommand: "",
-        portRangeStart: 3000,
-        portRangeEnd: 3099,
-      },
+      payload: { localPath: "", name: "", devCommand: "" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -219,24 +209,6 @@ describe("projects plugin", () => {
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json()).toMatchObject({ devCommand: "npm start" });
     expect(readProjectConfigFile(repoPath)).toMatchObject({ devCommand: "npm start" });
-  });
-
-  it("should reject updating only one port bound without the other", async () => {
-    const repoPath = trackRepoPath();
-    const createResponse = await app.inject({
-      method: "POST",
-      url: "/api/projects",
-      payload: buildCreateProjectInput({ localPath: repoPath }),
-    });
-    const created = createResponse.json();
-
-    const response = await app.inject({
-      method: "PATCH",
-      url: `/api/projects/${created.id}`,
-      payload: { portRangeStart: 9000 },
-    });
-
-    expect(response.statusCode).toBe(400);
   });
 
   it("should return 404 when updating a project id that does not exist", async () => {

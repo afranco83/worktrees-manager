@@ -93,11 +93,7 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       const project = insertProject(fastify.db, request.body);
 
-      writeProjectConfigFile(project.localPath, {
-        devCommand: project.devCommand,
-        portRangeStart: project.portRangeStart,
-        portRangeEnd: project.portRangeEnd,
-      });
+      writeProjectConfigFile(project.localPath, { devCommand: project.devCommand });
 
       reply.code(201);
 
@@ -116,14 +112,9 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       const project = updateProject(fastify.db, { id: request.params.id, patch: request.body });
-      const { devCommand, portRangeStart, portRangeEnd } = request.body;
 
-      if (devCommand != null || portRangeStart != null || portRangeEnd != null) {
-        writeProjectConfigFile(project.localPath, {
-          devCommand: project.devCommand,
-          portRangeStart: project.portRangeStart,
-          portRangeEnd: project.portRangeEnd,
-        });
+      if (request.body.devCommand != null) {
+        writeProjectConfigFile(project.localPath, { devCommand: project.devCommand });
       }
 
       return project;

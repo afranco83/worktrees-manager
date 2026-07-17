@@ -10,6 +10,7 @@ build/
 
 # testing
 coverage/
+.playwright-mcp/
 
 # logs
 *.log

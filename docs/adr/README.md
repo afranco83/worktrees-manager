@@ -4,7 +4,11 @@ Decisiones de arquitectura individuales, formato [MADR](https://adr.github.io/ma
 
 A diferencia de otros repos propios sobre el mismo modelo documental, aquí no hay ADRs retroactivos: la carpeta arranca vacía junto con el resto de la documentación (Fase 0), antes de escribir ningún código. Cualquier decisión de arquitectura nueva y significativa (no un detalle de implementación) se documenta con un ADR en el momento en que se toma.
 
-| ADR                                                  | Decisión                                                                                              |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [0001](./0001-esquema-datos-y-migraciones-sqlite.md) | Migraciones SQLite hand-rolled + IDs UUID en `projects`/`worktrees`, autoincremental en `log_entries` |
-| [0002](./0002-stack-ui-fase-3.md)                    | Preset `base-nova` de shadcn/ui, `standardSchemaResolver` para RHF+Zod v4, router/Zustand diferidos   |
+| ADR                                                     | Decisión                                                                                                                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| [0001](./0001-esquema-datos-y-migraciones-sqlite.md)    | Migraciones SQLite hand-rolled + IDs UUID en `projects`/`worktrees`, autoincremental en `log_entries`                         |
+| [0002](./0002-stack-ui-fase-3.md)                       | Preset `base-nova` de shadcn/ui, `standardSchemaResolver` para RHF+Zod v4, router/Zustand diferidos                           |
+| [0003](./0003-ciclo-de-vida-de-worktrees.md)            | Solo rama nueva por worktree, resolución de rama por defecto, `execa`, puertos sin `detect-port` + lock/índice único          |
+| [0004](./0004-navegacion-maestro-detalle-con-router.md) | Navegación maestro-detalle: introducción de `react-router`, proyecto seleccionado en la URL                                   |
+| [0005](./0005-worktrees-anidados-y-abrir-terminal.md)   | Worktrees anidados en `.worktrees/` del proyecto (revisa ADR-0003) + `.gitignore` automático + abrir terminal multiplataforma |
+| [0006](./0006-ajustes-globales-puertos-y-terminal.md)   | Ajustes globales: terminal preferida (lista curada, sin detección) + rango de puertos único, fix de lock de concurrencia      |

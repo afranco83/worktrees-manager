@@ -23,17 +23,9 @@ describe("config-file", () => {
   });
 
   it("should return the parsed config when the repo has a valid config file", () => {
-    writeProjectConfigFile(repoPath, {
-      devCommand: "pnpm dev",
-      portRangeStart: 3000,
-      portRangeEnd: 3099,
-    });
+    writeProjectConfigFile(repoPath, { devCommand: "pnpm dev" });
 
-    expect(readProjectConfigFile(repoPath)).toEqual({
-      devCommand: "pnpm dev",
-      portRangeStart: 3000,
-      portRangeEnd: 3099,
-    });
+    expect(readProjectConfigFile(repoPath)).toEqual({ devCommand: "pnpm dev" });
   });
 
   it("should throw InvalidProjectConfigFileError when the config file is not valid JSON", () => {
@@ -43,31 +35,25 @@ describe("config-file", () => {
   });
 
   it("should throw InvalidProjectConfigFileError when the config file does not match the schema", () => {
-    writeFileSync(
-      join(repoPath, CONFIG_FILE_NAME),
-      JSON.stringify({ devCommand: "pnpm dev" }),
-      "utf-8",
-    );
+    writeFileSync(join(repoPath, CONFIG_FILE_NAME), JSON.stringify({ devCommand: "" }), "utf-8");
 
     expect(() => readProjectConfigFile(repoPath)).toThrow(InvalidProjectConfigFileError);
   });
 
-  it("should overwrite an existing config file when writing again with new values", () => {
-    writeProjectConfigFile(repoPath, {
-      devCommand: "pnpm dev",
-      portRangeStart: 3000,
-      portRangeEnd: 3099,
-    });
-    writeProjectConfigFile(repoPath, {
-      devCommand: "npm start",
-      portRangeStart: 4000,
-      portRangeEnd: 4099,
-    });
+  it("should ignore leftover fields from an older config file format", () => {
+    writeFileSync(
+      join(repoPath, CONFIG_FILE_NAME),
+      JSON.stringify({ devCommand: "pnpm dev", portRangeStart: 3000, portRangeEnd: 3099 }),
+      "utf-8",
+    );
 
-    expect(readProjectConfigFile(repoPath)).toEqual({
-      devCommand: "npm start",
-      portRangeStart: 4000,
-      portRangeEnd: 4099,
-    });
+    expect(readProjectConfigFile(repoPath)).toEqual({ devCommand: "pnpm dev" });
+  });
+
+  it("should overwrite an existing config file when writing again with new values", () => {
+    writeProjectConfigFile(repoPath, { devCommand: "pnpm dev" });
+    writeProjectConfigFile(repoPath, { devCommand: "npm start" });
+
+    expect(readProjectConfigFile(repoPath)).toEqual({ devCommand: "npm start" });
   });
 });
