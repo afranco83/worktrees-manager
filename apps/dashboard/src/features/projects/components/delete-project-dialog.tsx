@@ -16,10 +16,12 @@ export function DeleteProjectDialog({
   project,
   open,
   onOpenChange,
+  onDeleted,
 }: {
   project: Project;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDeleted?: () => void;
 }) {
   const deleteProject = useDeleteProject();
 
@@ -31,6 +33,7 @@ export function DeleteProjectDialog({
     }
 
     onOpenChange(false);
+    onDeleted?.();
   }
 
   return (

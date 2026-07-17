@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ExecaError, execa } from "execa";
@@ -100,8 +101,36 @@ export async function listLocalBranches(repoPath: string): Promise<string[]> {
     .filter((line) => line !== "");
 }
 
+/**
+ * Anidado dentro del propio repo (no hermano) — ver ADR-0005. Requiere que el
+ * repo ignore este directorio (`ensureWorktreesDirectoryIgnored`) o ensucia el
+ * `git status` del repo principal con todo el contenido de cada worktree.
+ */
+export const WORKTREES_DIRECTORY_NAME = ".worktrees";
+
 export function computeWorktreePath(project: { localPath: string }, newBranch: string): string {
-  return join(`${project.localPath}.worktrees`, newBranch);
+  return join(project.localPath, WORKTREES_DIRECTORY_NAME, newBranch);
+}
+
+/**
+ * Añade `.worktrees/` al `.gitignore` del repo si no está ya cubierto, para que
+ * crear worktrees anidados no ensucie el `git status` del repo principal con
+ * todo su contenido. Idempotente: no duplica la entrada en llamadas sucesivas.
+ */
+export function ensureWorktreesDirectoryIgnored(repoPath: string): void {
+  const gitignorePath = join(repoPath, ".gitignore");
+  const existingContent = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+  const ignoreEntry = `${WORKTREES_DIRECTORY_NAME}/`;
+  const alreadyIgnored = existingContent
+    .split("\n")
+    .some((line) => line.trim() === ignoreEntry || line.trim() === WORKTREES_DIRECTORY_NAME);
+
+  if (alreadyIgnored) {
+    return;
+  }
+
+  const needsLeadingNewline = existingContent.length > 0 && !existingContent.endsWith("\n");
+  appendFileSync(gitignorePath, `${needsLeadingNewline ? "\n" : ""}${ignoreEntry}\n`);
 }
 
 function readStderr(error: unknown): string {

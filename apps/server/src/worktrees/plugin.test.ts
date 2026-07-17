@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -47,23 +47,26 @@ describe("worktrees plugin", () => {
   afterEach(() => {
     for (const repoPath of repoPaths) {
       rmSync(repoPath, { recursive: true, force: true });
-      rmSync(`${repoPath}.worktrees`, { recursive: true, force: true });
     }
   });
 
-  async function createProject(
-    overrides: Partial<{ portRangeStart: number; portRangeEnd: number }> = {},
-  ) {
+  async function createProject() {
     const repoPath = createGitRepoDir();
     repoPaths.push(repoPath);
 
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: buildCreateProjectInput({ localPath: repoPath, ...overrides }),
+      payload: buildCreateProjectInput({ localPath: repoPath }),
     });
 
     return projectSchema.parse(response.json());
+  }
+
+  async function getGlobalPortRange(): Promise<{ portRangeStart: number; portRangeEnd: number }> {
+    const response = await app.inject({ method: "GET", url: "/api/settings" });
+
+    return response.json();
   }
 
   it("should return 404 for git-info when the project does not exist", async () => {
@@ -115,8 +118,9 @@ describe("worktrees plugin", () => {
     expect(response.json()).toEqual([]);
   });
 
-  it("should create a worktree on disk from the default branch with a port in range", async () => {
+  it("should create a worktree on disk from the default branch with a port in the global range", async () => {
     const project = await createProject();
+    const { portRangeStart, portRangeEnd } = await getGlobalPortRange();
 
     const response = await app.inject({
       method: "POST",
@@ -127,9 +131,29 @@ describe("worktrees plugin", () => {
     expect(response.statusCode).toBe(201);
     const worktree = response.json();
     expect(worktree).toMatchObject({ projectId: project.id, branch: "feature-a" });
-    expect(worktree.port).toBeGreaterThanOrEqual(project.portRangeStart);
-    expect(worktree.port).toBeLessThanOrEqual(project.portRangeEnd);
+    expect(worktree.port).toBeGreaterThanOrEqual(portRangeStart);
+    expect(worktree.port).toBeLessThanOrEqual(portRangeEnd);
     expect(existsSync(worktree.path)).toBe(true);
+  });
+
+  it("should create the worktree nested inside the project and ignore it from the project's own git status", async () => {
+    const project = await createProject();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-nested", base: { type: "default" } },
+    });
+
+    const worktree = response.json();
+    expect(worktree.path).toBe(join(project.localPath, ".worktrees", "feature-nested"));
+    expect(readFileSync(join(project.localPath, ".gitignore"), "utf-8")).toContain(".worktrees/");
+    // ".worktrees-manager.json" (config del proyecto, sin relación) sí puede
+    // aparecer como sin seguimiento; solo importa que el directorio del
+    // worktree en sí no aparezca.
+    expect(
+      execFileSync("git", ["status", "--porcelain"], { cwd: project.localPath }).toString(),
+    ).not.toContain(".worktrees/feature-nested");
   });
 
   it("should assign non-colliding ports to two worktrees of the same project", async () => {
@@ -149,9 +173,9 @@ describe("worktrees plugin", () => {
     expect(first.json().port).not.toBe(second.json().port);
   });
 
-  it("should assign a free port to a second project even when its port range overlaps with the first project's", async () => {
-    const projectA = await createProject({ portRangeStart: 3000, portRangeEnd: 3099 });
-    const projectB = await createProject({ portRangeStart: 3000, portRangeEnd: 3099 });
+  it("should assign a free port to a second, different project from the same global pool", async () => {
+    const projectA = await createProject();
+    const projectB = await createProject();
 
     const first = await app.inject({
       method: "POST",
@@ -170,7 +194,7 @@ describe("worktrees plugin", () => {
     expect(second.json().port).not.toBe(first.json().port);
   });
 
-  it("should create both worktrees with distinct ports when requested concurrently", async () => {
+  it("should create both worktrees with distinct ports when requested concurrently for the same project", async () => {
     const project = await createProject();
 
     const [first, second] = await Promise.all([
@@ -182,6 +206,32 @@ describe("worktrees plugin", () => {
       app.inject({
         method: "POST",
         url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-concurrent-b", base: { type: "default" } },
+      }),
+    ]);
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(first.json().port).not.toBe(second.json().port);
+  });
+
+  it("should create both worktrees with distinct ports when requested concurrently for two different projects", async () => {
+    // El rango de puertos es global (ver ADR-0006): dos proyectos distintos
+    // compiten por el mismo pool, así que esta carrera solo se evita si la
+    // sección crítica de asignación usa una clave de lock global, no por
+    // proyecto — regresión directa de ese fix.
+    const projectA = await createProject();
+    const projectB = await createProject();
+
+    const [first, second] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/api/projects/${projectA.id}/worktrees`,
+        payload: { newBranch: "feature-concurrent-a", base: { type: "default" } },
+      }),
+      app.inject({
+        method: "POST",
+        url: `/api/projects/${projectB.id}/worktrees`,
         payload: { newBranch: "feature-concurrent-b", base: { type: "default" } },
       }),
     ]);
@@ -356,5 +406,14 @@ describe("worktrees plugin", () => {
     expect(statusCodes).toContain(204);
     expect(statusCodes.every((code) => code === 204 || code === 404)).toBe(true);
     expect(existsSync(worktree.path)).toBe(false);
+  });
+
+  it("should return 404 when opening a terminal for a worktree id that does not exist", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/worktrees/00000000-0000-4000-8000-000000000000/open-terminal",
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 });

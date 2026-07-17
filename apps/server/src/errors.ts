@@ -23,3 +23,5 @@ export class WorktreeHasUncommittedChangesError extends Error {}
 export class NoFreePortAvailableError extends Error {}
 
 export class GitWorktreeOperationError extends Error {}
+
+export class TerminalLaunchError extends Error {}

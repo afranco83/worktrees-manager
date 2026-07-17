@@ -2,24 +2,44 @@ import { http, HttpResponse } from "msw";
 import { z } from "zod";
 
 import type { Project } from "@/features/projects/schemas";
+import type { AppSettings, TerminalOption } from "@/features/settings/schemas";
 import type { ProjectGitInfo, Worktree } from "@/features/worktrees/schemas";
 
 const createProjectRequestSchema = z.object({
   localPath: z.string(),
   name: z.string(),
   devCommand: z.string(),
-  portRangeStart: z.number(),
-  portRangeEnd: z.number(),
 });
 
 const updateProjectRequestSchema = z
   .object({
     name: z.string(),
     devCommand: z.string(),
+  })
+  .partial();
+
+const updateSettingsRequestSchema = z
+  .object({
+    preferredTerminalCommand: z.string().nullable(),
     portRangeStart: z.number(),
     portRangeEnd: z.number(),
   })
   .partial();
+
+const FAKE_TERMINAL_PRESETS: TerminalOption[] = [
+  { name: "Terminal", command: "open -a Terminal {path}" },
+  { name: "iTerm2", command: "open -a iTerm {path}" },
+];
+
+export let settingsStore: AppSettings = {
+  preferredTerminalCommand: null,
+  portRangeStart: 3000,
+  portRangeEnd: 3999,
+};
+
+export function resetSettingsStore(): void {
+  settingsStore = { preferredTerminalCommand: null, portRangeStart: 3000, portRangeEnd: 3999 };
+}
 
 export let projectsStore: Project[] = [];
 
@@ -174,7 +194,7 @@ export const handlers = [
       id: crypto.randomUUID(),
       projectId,
       branch: body.newBranch,
-      path: `/repos/project.worktrees/${body.newBranch}`,
+      path: `/repos/project/.worktrees/${body.newBranch}`,
       port: nextWorktreePort,
       processStatus: "stopped",
       pid: null,
@@ -223,6 +243,35 @@ export const handlers = [
       { status: 404 },
     );
   }),
+
+  http.post("/api/worktrees/:id/open-terminal", ({ params }) => {
+    const id = requirePathParam(params.id);
+    const exists = Object.values(worktreesStore).some((worktrees) =>
+      worktrees.some((worktree) => worktree.id === id),
+    );
+
+    if (!exists) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get("/api/settings", () => HttpResponse.json(settingsStore)),
+
+  http.patch("/api/settings", async ({ request }) => {
+    const patch = updateSettingsRequestSchema.parse(await request.json());
+    settingsStore = { ...settingsStore, ...patch };
+
+    return HttpResponse.json(settingsStore);
+  }),
+
+  http.get("/api/settings/terminal-presets", () =>
+    HttpResponse.json({ platform: "darwin", presets: FAKE_TERMINAL_PRESETS }),
+  ),
 
   http.get("/api/filesystem/directories", ({ request }) => {
     const path = new URL(request.url).searchParams.get("path") || FAKE_HOME;

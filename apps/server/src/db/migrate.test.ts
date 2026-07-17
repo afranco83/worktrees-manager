@@ -26,6 +26,16 @@ describe("runMigrations", () => {
     );
   });
 
+  it("should seed a single app_settings row with sensible defaults", () => {
+    runMigrations(db);
+
+    const rows = db.prepare("SELECT * FROM app_settings").all();
+
+    expect(rows).toEqual([
+      { id: 1, preferred_terminal_command: null, port_range_start: 3000, port_range_end: 3999 },
+    ]);
+  });
+
   it("should not fail nor duplicate migration records when run more than once", () => {
     runMigrations(db);
     runMigrations(db);
@@ -42,9 +52,9 @@ describe("runMigrations", () => {
     const worktreeId = randomUUID();
 
     db.prepare(
-      `INSERT INTO projects (id, name, local_path, dev_command, port_range_start, port_range_end)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev", 3000, 3099);
+      `INSERT INTO projects (id, name, local_path, dev_command)
+       VALUES (?, ?, ?, ?)`,
+    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev");
 
     db.prepare(
       `INSERT INTO worktrees (id, project_id, branch, path, port)
@@ -78,9 +88,9 @@ describe("runMigrations", () => {
     const worktreeId = randomUUID();
 
     db.prepare(
-      `INSERT INTO projects (id, name, local_path, dev_command, port_range_start, port_range_end)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev", 3000, 3099);
+      `INSERT INTO projects (id, name, local_path, dev_command)
+       VALUES (?, ?, ?, ?)`,
+    ).run(projectId, "worktrees-manager", "/repo", "pnpm dev");
 
     db.prepare(
       `INSERT INTO worktrees (id, project_id, branch, path, port)

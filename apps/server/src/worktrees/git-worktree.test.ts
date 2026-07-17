@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,6 +17,7 @@ import {
   assertValidBranchName,
   computeWorktreePath,
   deleteLocalBranch,
+  ensureWorktreesDirectoryIgnored,
   getCurrentBranch,
   listLocalBranches,
   removeWorktree,
@@ -57,10 +58,71 @@ describe("assertValidBranchName", () => {
 });
 
 describe("computeWorktreePath", () => {
-  it("should compute a sibling .worktrees directory named after the branch", () => {
+  it("should compute a .worktrees directory nested inside the project, named after the branch", () => {
     expect(computeWorktreePath({ localPath: "/repos/foo" }, "feature/bar")).toBe(
-      join("/repos/foo.worktrees", "feature/bar"),
+      join("/repos/foo", ".worktrees", "feature/bar"),
     );
+  });
+});
+
+describe("ensureWorktreesDirectoryIgnored", () => {
+  let repoPath: string;
+
+  afterEach(() => {
+    if (repoPath && existsSync(repoPath)) {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("should create a .gitignore with the entry when the repo has none yet", () => {
+    repoPath = createRepo();
+
+    ensureWorktreesDirectoryIgnored(repoPath);
+
+    expect(readFileSync(join(repoPath, ".gitignore"), "utf-8")).toContain(".worktrees/");
+  });
+
+  it("should append the entry to an existing .gitignore without removing its content", () => {
+    repoPath = createRepo();
+    writeFileSync(join(repoPath, ".gitignore"), "node_modules/");
+
+    ensureWorktreesDirectoryIgnored(repoPath);
+
+    const content = readFileSync(join(repoPath, ".gitignore"), "utf-8");
+    expect(content).toContain("node_modules/");
+    expect(content).toContain(".worktrees/");
+  });
+
+  it("should not duplicate the entry when called more than once", () => {
+    repoPath = createRepo();
+
+    ensureWorktreesDirectoryIgnored(repoPath);
+    ensureWorktreesDirectoryIgnored(repoPath);
+
+    const lines = readFileSync(join(repoPath, ".gitignore"), "utf-8")
+      .split("\n")
+      .filter((line) => line.trim() === ".worktrees/");
+    expect(lines).toHaveLength(1);
+  });
+
+  it("should not duplicate the entry when the repo already ignores it without the trailing slash", () => {
+    repoPath = createRepo();
+    writeFileSync(join(repoPath, ".gitignore"), ".worktrees\n");
+
+    ensureWorktreesDirectoryIgnored(repoPath);
+
+    expect(readFileSync(join(repoPath, ".gitignore"), "utf-8")).toBe(".worktrees\n");
+  });
+
+  it("should keep the worktree directory out of the main repo's git status", async () => {
+    repoPath = createRepo();
+    ensureWorktreesDirectoryIgnored(repoPath);
+    const worktreePath = computeWorktreePath({ localPath: repoPath }, "feature-ignored");
+
+    await addWorktree({ repoPath, worktreePath, newBranch: "feature-ignored", baseRef: "HEAD" });
+
+    const status = execFileSync("git", ["status", "--porcelain"], { cwd: repoPath }).toString();
+    expect(status).not.toContain(".worktrees");
   });
 });
 
@@ -82,7 +144,7 @@ describe("git-worktree against a real repo", () => {
 
   function trackRepo(): string {
     const repoPath = createRepo();
-    paths.push(repoPath, `${repoPath}.worktrees`);
+    paths.push(repoPath);
 
     return repoPath;
   }
@@ -125,7 +187,7 @@ describe("git-worktree against a real repo", () => {
     });
 
     const repoPath = mkdtempSync(join(tmpdir(), "worktrees-manager-git-worktree-clone-"));
-    paths.push(repoPath, `${repoPath}.worktrees`);
+    paths.push(repoPath);
     // Clonar solo "develop" deja "main" únicamente como origin/main (tracking),
     // sin ninguna rama local "main" — la precondición real del bug de DWIM.
     execFileSync("git", ["clone", "--branch", "develop", originPath, repoPath], {

@@ -10,8 +10,6 @@ interface ProjectRow {
   name: string;
   local_path: string;
   dev_command: string;
-  port_range_start: number;
-  port_range_end: number;
   repo_owner: string | null;
   repo_name: string | null;
   created_at: string;
@@ -23,8 +21,6 @@ function toProject(row: ProjectRow): Project {
     name: row.name,
     localPath: row.local_path,
     devCommand: row.dev_command,
-    portRangeStart: row.port_range_start,
-    portRangeEnd: row.port_range_end,
     repoOwner: row.repo_owner,
     repoName: row.repo_name,
     createdAt: row.created_at,
@@ -58,17 +54,9 @@ export function insertProject(db: Database.Database, input: CreateProjectInput):
 
   try {
     db.prepare(
-      `INSERT INTO projects (id, name, local_path, dev_command, port_range_start, port_range_end, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      input.name,
-      input.localPath,
-      input.devCommand,
-      input.portRangeStart,
-      input.portRangeEnd,
-      createdAt,
-    );
+      `INSERT INTO projects (id, name, local_path, dev_command, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(id, input.name, input.localPath, input.devCommand, createdAt);
   } catch (error) {
     if (error instanceof Database.SqliteError && error.code === "SQLITE_CONSTRAINT_UNIQUE") {
       throw new DuplicateProjectPathError(
@@ -84,8 +72,6 @@ export function insertProject(db: Database.Database, input: CreateProjectInput):
     name: input.name,
     localPath: input.localPath,
     devCommand: input.devCommand,
-    portRangeStart: input.portRangeStart,
-    portRangeEnd: input.portRangeEnd,
     repoOwner: null,
     repoName: null,
     createdAt,
@@ -106,13 +92,13 @@ export function updateProject(
     ...existing,
     ...(patch.name != null && { name: patch.name }),
     ...(patch.devCommand != null && { devCommand: patch.devCommand }),
-    ...(patch.portRangeStart != null && { portRangeStart: patch.portRangeStart }),
-    ...(patch.portRangeEnd != null && { portRangeEnd: patch.portRangeEnd }),
   };
 
-  db.prepare(
-    `UPDATE projects SET name = ?, dev_command = ?, port_range_start = ?, port_range_end = ? WHERE id = ?`,
-  ).run(updated.name, updated.devCommand, updated.portRangeStart, updated.portRangeEnd, id);
+  db.prepare(`UPDATE projects SET name = ?, dev_command = ? WHERE id = ?`).run(
+    updated.name,
+    updated.devCommand,
+    id,
+  );
 
   return updated;
 }

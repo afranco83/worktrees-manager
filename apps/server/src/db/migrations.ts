@@ -53,4 +53,30 @@ export const migrations: Migration[] = [
       CREATE UNIQUE INDEX idx_worktrees_port_unique ON worktrees (port);
     `,
   },
+  {
+    // Fila única forzada con CHECK (id = 1): ajustes globales de la app, no por
+    // proyecto (ver ADR-0006). Sembrada aquí mismo para que getSettings() nunca
+    // tenga que manejar el caso "todavía no existe".
+    name: "0003_app_settings",
+    up: `
+      CREATE TABLE app_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        preferred_terminal_command TEXT,
+        port_range_start INTEGER NOT NULL DEFAULT 3000,
+        port_range_end INTEGER NOT NULL DEFAULT 3999
+      );
+
+      INSERT INTO app_settings (id) VALUES (1);
+    `,
+  },
+  {
+    // El rango de puertos pasa de ser por-proyecto a global (ver ADR-0006): el
+    // índice único global de 0002 ya hacía que los rangos por-proyecto no
+    // aportaran ninguna protección real.
+    name: "0004_projects_drop_port_range",
+    up: `
+      ALTER TABLE projects DROP COLUMN port_range_start;
+      ALTER TABLE projects DROP COLUMN port_range_end;
+    `,
+  },
 ];

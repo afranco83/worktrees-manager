@@ -3,11 +3,13 @@ import { z } from "zod";
 
 import { CurrentBranchNotFoundError, GitWorktreeOperationError, NotFoundError } from "../errors.js";
 import { getProjectById } from "../projects/repository.js";
+import { getSettings } from "../settings/repository.js";
 import {
   addWorktree,
   assertValidBranchName,
   computeWorktreePath,
   deleteLocalBranch,
+  ensureWorktreesDirectoryIgnored,
   getCurrentBranch,
   listLocalBranches,
   removeWorktree,
@@ -22,6 +24,7 @@ import {
   listUsedPorts,
   listWorktreesByProject,
 } from "./repository.js";
+import { openTerminalAt } from "./terminal.js";
 import {
   createWorktreeSchema,
   deleteWorktreeQuerySchema,
@@ -31,6 +34,16 @@ import {
   worktreeSchema,
   type WorktreeBase,
 } from "./schemas.js";
+
+/**
+ * El rango de puertos es global a la app (ver ADR-0006), no por proyecto: dos
+ * creaciones de worktree en proyectos DISTINTOS ahora compiten por el mismo
+ * pool, así que la sección crítica de asignación se serializa con una clave
+ * fija para toda la app, no con `project.id` — si no, el índice único de
+ * `worktrees.port` seguiría evitando datos corruptos, pero un choque entre
+ * proyectos distintos pasaría de ser teórico a razonablemente probable.
+ */
+const GLOBAL_PORT_ALLOCATION_LOCK_KEY = "global-port-allocation";
 
 async function resolveBaseRef(repoPath: string, base: WorktreeBase): Promise<string> {
   if (base.type === "default") {
@@ -127,15 +140,17 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const project = requireProject(fastify.db, request.params.projectId);
 
-      const worktree = await withProjectLock(project.id, async () => {
+      const worktree = await withProjectLock(GLOBAL_PORT_ALLOCATION_LOCK_KEY, async () => {
         assertValidBranchName(request.body.newBranch);
 
         const baseRef = await resolveBaseRef(project.localPath, request.body.base);
         const worktreePath = computeWorktreePath(project, request.body.newBranch);
+        ensureWorktreesDirectoryIgnored(project.localPath);
+        const settings = getSettings(fastify.db);
         const usedPorts = listUsedPorts(fastify.db);
         const port = await assignFreePort({
-          start: project.portRangeStart,
-          end: project.portRangeEnd,
+          start: settings.portRangeStart,
+          end: settings.portRangeEnd,
           usedPorts,
         });
 
@@ -202,6 +217,23 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
         deleteWorktree(fastify.db, worktree.id);
       });
+
+      reply.code(204).send();
+    },
+  );
+
+  fastify.post(
+    "/worktrees/:id/open-terminal",
+    { schema: { params: worktreeIdParamsSchema } },
+    async (request, reply) => {
+      const worktree = getWorktreeById(fastify.db, request.params.id);
+
+      if (!worktree) {
+        throw new NotFoundError(`No existe un worktree con id ${request.params.id}`);
+      }
+
+      const { preferredTerminalCommand } = getSettings(fastify.db);
+      await openTerminalAt(worktree.path, { preferredCommand: preferredTerminalCommand });
 
       reply.code(204).send();
     },
