@@ -35,16 +35,28 @@ function defaultCommandExists(command: string): boolean {
 }
 
 /**
- * Cita `value` como argumento literal de shell para la plataforma dada. En
- * Windows los nombres de ruta no pueden contener `"` (carácter reservado del
- * sistema de ficheros), así que envolver en comillas dobles basta sin escapado
- * adicional para `cmd.exe`. En POSIX se usan comillas simples (todo literal
- * salvo una comilla simple, que se cierra/escapa/reabre) — a diferencia de
- * `JSON.stringify`, que no protege frente a `$()`/backticks de un shell real.
+ * Cita `value` como argumento literal de shell para la plataforma dada.
+ *
+ * En POSIX se usan comillas simples (todo literal salvo una comilla simple,
+ * que se cierra/escapa/reabre) — a diferencia de `JSON.stringify`, que no
+ * protege frente a `$()`/backticks de un shell real.
+ *
+ * En Windows, envolver solo en comillas dobles NO basta: `cmd.exe` expande
+ * `%VAR%` como variable de entorno y trata `&`/`|`/`<`/`>`/`^`/`(`/`)` como
+ * metacaracteres propios, en ambos casos independientemente de las comillas.
+ * Se sigue el algoritmo documentado en https://qntm.org/cmd (el mismo que usa
+ * `cross-spawn`): se duplican las barras invertidas que preceden a una
+ * comilla y se escapan las comillas internas, se envuelve en comillas dobles,
+ * y se antepone `^` a cada metacarácter de `cmd.exe` — incluidas las propias
+ * comillas envolventes. Sigue siendo esfuerzo best-effort, no una garantía
+ * formal (no existe una gramática de citado completa y consistente en
+ * `cmd.exe`), pero cierra los vectores conocidos y documentados.
  */
 function quoteForShell(value: string, platform: NodeJS.Platform): string {
   if (platform === "win32") {
-    return `"${value}"`;
+    const quoted = `"${value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, "$1$1")}"`;
+
+    return quoted.replace(/(["^&|<>()%])/g, "^$1");
   }
 
   return `'${value.replaceAll("'", `'\\''`)}'`;
@@ -123,7 +135,16 @@ export async function openTerminalAt(
       if (launcher.commandExists("wt")) {
         await launcher.run("wt", ["-d", path]);
       } else {
-        await launcher.run("cmd", ["/c", "start", "cmd", "/K", `cd /d "${path}"`]);
+        // El propio `cmd.exe` lanzado (no execa) es quien parsea e interpreta
+        // esta cadena como línea de comandos vía `/K`, así que necesita el
+        // mismo escapado que el comando preferido, no solo comillas.
+        await launcher.run("cmd", [
+          "/c",
+          "start",
+          "cmd",
+          "/K",
+          `cd /d ${quoteForShell(path, "win32")}`,
+        ]);
       }
       return;
     }

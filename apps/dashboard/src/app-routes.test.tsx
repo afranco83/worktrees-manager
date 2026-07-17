@@ -345,4 +345,25 @@ describe("app routes", () => {
       expect(screen.queryByRole("dialog", { name: "Ajustes" })).not.toBeInTheDocument();
     });
   });
+
+  it("should reject a custom terminal command that does not contain the {path} placeholder", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByRole("heading", { name: EXISTING_PROJECT.name });
+    await user.click(screen.getByRole("button", { name: "Ajustes" }));
+
+    await user.click(await screen.findByRole("combobox", { name: "Terminal preferida" }));
+    await user.click(await screen.findByRole("option", { name: "Personalizado…" }));
+
+    await user.type(screen.getByLabelText("Comando personalizado"), "open -a MiTerminal");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(
+      await screen.findByText("El comando debe contener el placeholder {path}"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Ajustes" })).toBeInTheDocument();
+  });
 });

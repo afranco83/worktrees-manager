@@ -50,7 +50,21 @@ describe("openTerminalAt", () => {
       "start",
       "cmd",
       "/K",
-      'cd /d "C:\\repos\\foo"',
+      'cd /d ^"C:\\repos\\foo^"',
+    ]);
+  });
+
+  it("should neutralize cmd.exe metacharacters in the cmd.exe fallback path too, not just the preferred command", async () => {
+    const launcher = buildLauncher({ platform: "win32", commandExists: () => false });
+
+    await openTerminalAt("C:\\repos\\foo%TEMP%&calc.exe", { launcher });
+
+    expect(launcher.run).toHaveBeenCalledWith("cmd", [
+      "/c",
+      "start",
+      "cmd",
+      "/K",
+      'cd /d ^"C:\\repos\\foo^%TEMP^%^&calc.exe^"',
     ]);
   });
 
@@ -144,7 +158,7 @@ describe("openTerminalAt", () => {
     expect(launcher.runShellCommand).toHaveBeenCalledWith("open -a iTerm '/repos/it'\\''s-a-repo'");
   });
 
-  it("should double-quote the path on Windows for the preferred command", async () => {
+  it("should quote the path on Windows for the preferred command", async () => {
     const launcher = buildLauncher({ platform: "win32" });
 
     await openTerminalAt("C:\\repos\\foo bar", {
@@ -152,7 +166,20 @@ describe("openTerminalAt", () => {
       preferredCommand: "wt -d {path}",
     });
 
-    expect(launcher.runShellCommand).toHaveBeenCalledWith('wt -d "C:\\repos\\foo bar"');
+    expect(launcher.runShellCommand).toHaveBeenCalledWith('wt -d ^"C:\\repos\\foo bar^"');
+  });
+
+  it("should neutralize %VAR% expansion and cmd.exe operators in the preferred command's path, not just wrap it in quotes", async () => {
+    const launcher = buildLauncher({ platform: "win32" });
+
+    await openTerminalAt("C:\\repos\\foo%APPDATA%&calc.exe|whoami", {
+      launcher,
+      preferredCommand: "wt -d {path}",
+    });
+
+    expect(launcher.runShellCommand).toHaveBeenCalledWith(
+      'wt -d ^"C:\\repos\\foo^%APPDATA^%^&calc.exe^|whoami^"',
+    );
   });
 
   it("should wrap a failure of the preferred command in TerminalLaunchError", async () => {

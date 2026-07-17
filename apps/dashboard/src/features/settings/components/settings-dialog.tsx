@@ -51,7 +51,11 @@ const settingsFormLocalSchema = z
   .refine((value) => value.terminalOption !== CUSTOM_OPTION || value.customCommand.trim() !== "", {
     message: "Indica el comando personalizado",
     path: ["customCommand"],
-  });
+  })
+  .refine(
+    (value) => value.terminalOption !== CUSTOM_OPTION || value.customCommand.includes("{path}"),
+    { message: "El comando debe contener el placeholder {path}", path: ["customCommand"] },
+  );
 
 type SettingsFormLocalInput = z.input<typeof settingsFormLocalSchema>;
 type SettingsFormLocalValues = z.output<typeof settingsFormLocalSchema>;

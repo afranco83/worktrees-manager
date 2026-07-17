@@ -68,6 +68,16 @@ describe("settings plugin", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  it("should reject a preferred terminal command without the {path} placeholder", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/settings",
+      payload: { preferredTerminalCommand: "open -a iTerm" },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   it("should list the terminal presets for the current platform", async () => {
     const response = await app.inject({ method: "GET", url: "/api/settings/terminal-presets" });
 

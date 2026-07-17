@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const PORT_RANGE_MESSAGE = "portRangeStart debe ser menor que portRangeEnd";
 const PORT_RANGE_TOGETHER_MESSAGE = "portRangeStart y portRangeEnd deben enviarse juntos";
+const TERMINAL_COMMAND_PLACEHOLDER_MESSAGE = "preferredTerminalCommand debe contener {path}";
 
 export const appSettingsSchema = z.object({
   preferredTerminalCommand: z.string().nullable(),
@@ -28,6 +29,11 @@ export const updateAppSettingsSchema = z
       value.portRangeEnd == null ||
       value.portRangeStart < value.portRangeEnd,
     { message: PORT_RANGE_MESSAGE, path: ["portRangeEnd"] },
+  )
+  .refine(
+    (value) =>
+      value.preferredTerminalCommand == null || value.preferredTerminalCommand.includes("{path}"),
+    { message: TERMINAL_COMMAND_PLACEHOLDER_MESSAGE, path: ["preferredTerminalCommand"] },
   );
 
 export const terminalOptionSchema = z.object({
