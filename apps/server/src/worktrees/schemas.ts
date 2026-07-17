@@ -56,3 +56,35 @@ export const projectGitInfoSchema = z.object({
 });
 
 export type ProjectGitInfo = z.infer<typeof projectGitInfoSchema>;
+
+const LOG_ENTRIES_DEFAULT_LIMIT = 500;
+const LOG_ENTRIES_MAX_LIMIT = 2000;
+
+// Mismo schema para la respuesta REST del histórico y el payload del evento de
+// socket `log-entry` — el `id` real de `log_entries` actúa de cursor para que
+// el cliente pueda unir histórico + tiempo real sin perder ni duplicar líneas.
+export const logEntrySchema = z.object({
+  id: z.number().int(),
+  timestamp: z.string(),
+  stream: z.enum(["stdout", "stderr"]),
+  content: z.string(),
+});
+
+export type LogEntry = z.infer<typeof logEntrySchema>;
+
+export const listLogEntriesQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(LOG_ENTRIES_MAX_LIMIT)
+    .default(LOG_ENTRIES_DEFAULT_LIMIT),
+});
+
+export const processStatusEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  processStatus: z.enum(WORKTREE_PROCESS_STATUSES),
+  pid: z.number().int().nullable(),
+});
+
+export type ProcessStatusEvent = z.infer<typeof processStatusEventSchema>;

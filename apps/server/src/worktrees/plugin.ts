@@ -15,6 +15,7 @@ import {
   removeWorktree,
   resolveDefaultBranch,
 } from "./git-worktree.js";
+import { listRecentLogEntries } from "./log-repository.js";
 import { assignFreePort } from "./port-allocator.js";
 import { withProjectLock } from "./project-lock.js";
 import {
@@ -24,16 +25,18 @@ import {
   listUsedPorts,
   listWorktreesByProject,
 } from "./repository.js";
-import { openTerminalAt } from "./terminal.js";
 import {
   createWorktreeSchema,
   deleteWorktreeQuerySchema,
+  listLogEntriesQuerySchema,
+  logEntrySchema,
   projectGitInfoSchema,
   projectIdParamsSchema,
   worktreeIdParamsSchema,
   worktreeSchema,
   type WorktreeBase,
 } from "./schemas.js";
+import { openTerminalAt } from "./terminal.js";
 
 /**
  * El rango de puertos es global a la app (ver ADR-0006), no por proyecto: dos
@@ -73,6 +76,16 @@ function requireProject(db: Parameters<typeof getProjectById>[0], projectId: str
   }
 
   return project;
+}
+
+function requireWorktree(db: Parameters<typeof getWorktreeById>[0], id: string) {
+  const worktree = getWorktreeById(db, id);
+
+  if (!worktree) {
+    throw new NotFoundError(`No existe un worktree con id ${id}`);
+  }
+
+  return worktree;
 }
 
 export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
@@ -207,12 +220,7 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const worktree = getWorktreeById(fastify.db, request.params.id);
-
-      if (!worktree) {
-        throw new NotFoundError(`No existe un worktree con id ${request.params.id}`);
-      }
-
+      const worktree = requireWorktree(fastify.db, request.params.id);
       const project = requireProject(fastify.db, worktree.projectId);
 
       await withProjectLock(project.id, async () => {
@@ -233,12 +241,7 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
     "/worktrees/:id/open-terminal",
     { schema: { params: worktreeIdParamsSchema } },
     async (request, reply) => {
-      const worktree = getWorktreeById(fastify.db, request.params.id);
-
-      if (!worktree) {
-        throw new NotFoundError(`No existe un worktree con id ${request.params.id}`);
-      }
-
+      const worktree = requireWorktree(fastify.db, request.params.id);
       const project = requireProject(fastify.db, worktree.projectId);
 
       // Mismo lock por proyecto que crear/borrar, para no abrir una terminal
@@ -249,6 +252,47 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       reply.code(204).send();
+    },
+  );
+
+  fastify.post(
+    "/worktrees/:id/start",
+    { schema: { params: worktreeIdParamsSchema, response: { 200: worktreeSchema } } },
+    async (request) => {
+      const worktree = requireWorktree(fastify.db, request.params.id);
+      const project = requireProject(fastify.db, worktree.projectId);
+
+      await fastify.processManager.start(worktree, project);
+
+      return requireWorktree(fastify.db, worktree.id);
+    },
+  );
+
+  fastify.post(
+    "/worktrees/:id/stop",
+    { schema: { params: worktreeIdParamsSchema, response: { 200: worktreeSchema } } },
+    async (request) => {
+      const worktree = requireWorktree(fastify.db, request.params.id);
+
+      await fastify.processManager.stop(worktree.id);
+
+      return requireWorktree(fastify.db, worktree.id);
+    },
+  );
+
+  fastify.get(
+    "/worktrees/:id/logs",
+    {
+      schema: {
+        params: worktreeIdParamsSchema,
+        querystring: listLogEntriesQuerySchema,
+        response: { 200: z.array(logEntrySchema) },
+      },
+    },
+    async (request) => {
+      const worktree = requireWorktree(fastify.db, request.params.id);
+
+      return listRecentLogEntries(fastify.db, worktree.id, request.query.limit);
     },
   );
 };

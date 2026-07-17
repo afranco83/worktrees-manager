@@ -126,17 +126,26 @@ Tareas:
 
 ---
 
-## Fase 5 — Entornos de desarrollo y logs
+## Fase 5 — Entornos de desarrollo y logs _(cerrada — 2026-07-17)_
 
 **Objetivo**: arrancar/parar el proceso de dev de cada worktree con logs en tiempo real.
 
 Tareas:
 
-- [ ] Arranque / parada del proceso de dev
-- [ ] Streaming de logs en tiempo real (WebSockets)
-- [ ] Estado visual: parado / arrancando / corriendo / error
+- [x] Arranque / parada del proceso de dev
+- [x] Streaming de logs en tiempo real (WebSockets)
+- [x] Estado visual: parado / arrancando / corriendo / error
 
-**DoD**: a definir al cerrar Fase 4.
+**DoD**: desde la UI se arranca/para el entorno de dev de un worktree, se ve su estado en tiempo real (parado/arrancando/corriendo/error) y se consultan sus logs (stdout/stderr) en vivo y su histórico de la sesión, sin salir del dashboard. **Cumplido**: decisiones completas en [ADR-0007](./adr/0007-arranque-parada-y-logs-de-entornos-dev.md). 172 tests backend (+27 nuevos: `process-manager.test.ts`, `log-repository.test.ts`, `socket.test.ts`, extensión de `repository.test.ts`/`plugin.test.ts`) + 25 tests frontend en verde.
+
+**Dos bugs reales encontrados por los propios tests, no por revisión manual**:
+
+- `events.once()` trata `'error'` de forma especial al esperar cualquier otro evento (aquí `'spawn'`), y **rechaza** esa promesa si `'error'` llega antes — la carrera inicial para detectar un fallo de arranque dejaba escapar el error crudo de Node en vez de convertirlo en `DevCommandSpawnError`. Corregido añadiendo un manejador de rechazo al `.then()` de `once(child, 'spawn')`.
+- Cerrar el servidor con un cliente WebSocket conectado colgaba indefinidamente: `io.close()` cierra internamente el mismo `http.Server` que Fastify ya cierra por su cuenta, y las dos llamadas competían. Corregido con `io.disconnectSockets(true)` en el hook `preClose` de Fastify (documentado explícitamente para este caso) en vez de `onClose`.
+
+Verificado también manualmente en navegador (Playwright) contra un proyecto de prueba real con un `devCommand` de juguete: arrancar y ver el estado pasar a "Corriendo" con el proceso real vivo (`ps`) y la variable `PORT` correcta en el primer log; abrir el diálogo de logs con el proceso ya corriendo y ver tanto el histórico como nuevas líneas en vivo sin huecos ni duplicados; un `devCommand` inválido pasa a "Error" (vía salida no-cero del shell, no vía fallo de spawn — `sh -c` sí arranca, el "comando no encontrado" es la propia salida del shell) con el botón de arrancar disponible de nuevo para reintentar; parar deja el puerto realmente libre, sin proceso residual (`ps` vacío tras el stop).
+
+**Incidente operativo durante esta misma verificación**: se encontraron 3 procesos de servidor (`tsx watch`) corriendo a la vez contra el registro real, acumulados a lo largo de la sesión sin limpiar instancias anteriores — la fila de `store_demo` desapareció de `projects` (verificado con una consulta de solo lectura; los datos de git/worktrees reales no se vieron afectados en ningún momento). Se mataron los procesos redundantes (dejando uno solo activo) y se re-dio de alta `store_demo` vía la propia API, nunca con SQL de escritura — mismo procedimiento que el incidente equivalente de la Fase 4. Lección reforzada: vigilar activamente cuántas instancias del servidor de dev quedan corriendo en sesiones largas, no solo evitar SQL directo.
 
 ---
 

@@ -102,3 +102,28 @@ export function deleteWorktree(db: Database.Database, id: string): void {
     throw new NotFoundError(`No existe un worktree con id ${id}`);
   }
 }
+
+export function updateWorktreeProcessState(
+  db: Database.Database,
+  id: string,
+  state: { processStatus: WorktreeProcessStatus; pid: number | null },
+): void {
+  db.prepare("UPDATE worktrees SET process_status = ?, pid = ? WHERE id = ?").run(
+    state.processStatus,
+    state.pid,
+    id,
+  );
+}
+
+/**
+ * Al arrancar el servidor no hay forma de recuperar un handle real de un
+ * proceso hijo de una ejecución anterior (viven solo en memoria, ver
+ * `process-manager.ts`) — se resetea cualquier fila que no esté ya "stopped"
+ * en vez de fingir que se sigue trackeando (mismo criterio que `project-lock.ts`
+ * para el resto de estado en memoria de la app).
+ */
+export function resetStaleProcessStates(db: Database.Database): void {
+  db.prepare(
+    `UPDATE worktrees SET process_status = 'stopped', pid = NULL WHERE process_status != 'stopped'`,
+  ).run();
+}

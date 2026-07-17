@@ -1,5 +1,7 @@
-import { Terminal, Trash2 } from "lucide-react";
+import { Play, ScrollText, Square, Terminal, Trash2 } from "lucide-react";
+import { useState, type ComponentProps } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardAction,
@@ -11,7 +13,27 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 
 import { useOpenWorktreeTerminal } from "../api/use-open-worktree-terminal";
-import type { Worktree } from "../schemas";
+import { useStartWorktree } from "../api/use-start-worktree";
+import { useStopWorktree } from "../api/use-stop-worktree";
+import type { Worktree, WorktreeProcessStatus } from "../schemas";
+import { WorktreeLogsDialog } from "./worktree-logs-dialog";
+
+const PROCESS_STATUS_LABELS: Record<WorktreeProcessStatus, string> = {
+  stopped: "Parado",
+  starting: "Arrancando…",
+  running: "Corriendo",
+  error: "Error",
+};
+
+const PROCESS_STATUS_BADGE_VARIANTS: Record<
+  WorktreeProcessStatus,
+  ComponentProps<typeof Badge>["variant"]
+> = {
+  stopped: "secondary",
+  starting: "outline",
+  running: "default",
+  error: "destructive",
+};
 
 function WorktreeCard({
   worktree,
@@ -21,6 +43,11 @@ function WorktreeCard({
   onDelete: (worktree: Worktree) => void;
 }) {
   const openTerminal = useOpenWorktreeTerminal();
+  const startWorktree = useStartWorktree();
+  const stopWorktree = useStopWorktree();
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
+
+  const isTransitioning = worktree.processStatus === "starting";
 
   return (
     <Card>
@@ -28,6 +55,22 @@ function WorktreeCard({
         <CardTitle level={4}>{worktree.branch}</CardTitle>
         <CardDescription className="truncate">{worktree.path}</CardDescription>
         <CardAction className="flex gap-2">
+          {worktree.processStatus === "running" ? (
+            <IconButton
+              icon={Square}
+              label="Parar entorno"
+              disabled={isTransitioning || stopWorktree.isPending}
+              onClick={() => stopWorktree.mutate(worktree.id)}
+            />
+          ) : (
+            <IconButton
+              icon={Play}
+              label="Arrancar entorno"
+              disabled={isTransitioning || startWorktree.isPending}
+              onClick={() => startWorktree.mutate(worktree.id)}
+            />
+          )}
+          <IconButton icon={ScrollText} label="Ver logs" onClick={() => setIsLogsOpen(true)} />
           <IconButton
             icon={Terminal}
             label="Abrir terminal"
@@ -42,13 +85,30 @@ function WorktreeCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">Puerto {worktree.port}</p>
+        <div className="flex items-center gap-2">
+          <Badge variant={PROCESS_STATUS_BADGE_VARIANTS[worktree.processStatus]}>
+            {PROCESS_STATUS_LABELS[worktree.processStatus]}
+          </Badge>
+          <p className="text-sm text-muted-foreground">Puerto {worktree.port}</p>
+        </div>
         {openTerminal.isError && (
           <p className="text-sm text-destructive" role="alert">
             {openTerminal.error.message}
           </p>
         )}
+        {startWorktree.isError && (
+          <p className="text-sm text-destructive" role="alert">
+            {startWorktree.error.message}
+          </p>
+        )}
+        {stopWorktree.isError && (
+          <p className="text-sm text-destructive" role="alert">
+            {stopWorktree.error.message}
+          </p>
+        )}
       </CardContent>
+
+      <WorktreeLogsDialog worktree={worktree} open={isLogsOpen} onOpenChange={setIsLogsOpen} />
     </Card>
   );
 }

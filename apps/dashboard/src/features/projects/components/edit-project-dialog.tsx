@@ -83,12 +83,18 @@ export function EditProjectDialog({
             <Input
               id="edit-devCommand"
               aria-invalid={errors.devCommand != null}
-              aria-describedby={errors.devCommand ? "edit-devCommand-error" : undefined}
+              aria-describedby={
+                errors.devCommand ? "edit-devCommand-error" : "edit-devCommand-hint"
+              }
               {...register("devCommand")}
             />
-            {errors.devCommand && (
+            {errors.devCommand ? (
               <p id="edit-devCommand-error" className="text-sm text-destructive">
                 {errors.devCommand.message}
+              </p>
+            ) : (
+              <p id="edit-devCommand-hint" className="text-sm text-muted-foreground">
+                El comando debe leer el puerto asignado de la variable de entorno <code>PORT</code>.
               </p>
             )}
           </div>

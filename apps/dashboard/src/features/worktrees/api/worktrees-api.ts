@@ -2,9 +2,11 @@ import { z } from "zod";
 
 import { apiRequest } from "@/lib/api-client";
 import {
+  logEntrySchema,
   projectGitInfoSchema,
   worktreeSchema,
   type CreateWorktreeFormValues,
+  type LogEntry,
   type ProjectGitInfo,
   type Worktree,
 } from "../schemas";
@@ -38,4 +40,16 @@ export async function deleteWorktree({ id, force }: { id: string; force: boolean
 
 export async function openWorktreeTerminal(id: string): Promise<void> {
   await apiRequest(`/api/worktrees/${id}/open-terminal`, { method: "POST" });
+}
+
+export async function startWorktree(id: string): Promise<Worktree> {
+  return worktreeSchema.parse(await apiRequest(`/api/worktrees/${id}/start`, { method: "POST" }));
+}
+
+export async function stopWorktree(id: string): Promise<Worktree> {
+  return worktreeSchema.parse(await apiRequest(`/api/worktrees/${id}/stop`, { method: "POST" }));
+}
+
+export async function fetchWorktreeLogs(id: string): Promise<LogEntry[]> {
+  return z.array(logEntrySchema).parse(await apiRequest(`/api/worktrees/${id}/logs`));
 }

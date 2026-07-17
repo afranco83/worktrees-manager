@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const WORKTREE_PROCESS_STATUSES = ["stopped", "starting", "running", "error"] as const;
+export type WorktreeProcessStatus = (typeof WORKTREE_PROCESS_STATUSES)[number];
 
 export const worktreeSchema = z.object({
   id: z.string().uuid(),
@@ -38,3 +39,23 @@ export const projectGitInfoSchema = z.object({
 });
 
 export type ProjectGitInfo = z.infer<typeof projectGitInfoSchema>;
+
+// Mismo schema para la respuesta REST del histórico y el payload del evento
+// de socket `log-entry` — el `id` actúa de cursor para unir histórico y
+// tiempo real sin perder ni duplicar líneas (ver `use-worktree-logs.ts`).
+export const logEntrySchema = z.object({
+  id: z.number().int(),
+  timestamp: z.string(),
+  stream: z.enum(["stdout", "stderr"]),
+  content: z.string(),
+});
+
+export type LogEntry = z.infer<typeof logEntrySchema>;
+
+export const processStatusEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  processStatus: z.enum(WORKTREE_PROCESS_STATUSES),
+  pid: z.number().int().nullable(),
+});
+
+export type ProcessStatusEvent = z.infer<typeof processStatusEventSchema>;

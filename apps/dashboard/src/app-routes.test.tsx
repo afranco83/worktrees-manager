@@ -275,6 +275,49 @@ describe("app routes", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("should start and stop a worktree's dev environment", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    expect(screen.getByText("Parado")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
+
+    expect(await screen.findByText("Corriendo")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Parar entorno" }));
+
+    expect(await screen.findByText("Parado")).toBeInTheDocument();
+  });
+
+  it("should show the log history when opening the logs dialog for a worktree", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
+    await screen.findByText("Corriendo");
+
+    await user.click(screen.getByRole("button", { name: "Ver logs" }));
+
+    expect(await screen.findByText("Servidor de desarrollo arrancado")).toBeInTheDocument();
+  });
+
   it("should delete a clean worktree when the deletion is confirmed", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 

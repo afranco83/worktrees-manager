@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -44,20 +44,25 @@ describe("worktrees plugin", () => {
     repoPaths = [];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Algunos tests arrancan procesos de dev reales (setInterval de larga
+    // duración) — hay que pararlos explícitamente para no dejar procesos
+    // huérfanos entre tests, ya que `app.inject()` nunca llama a `app.close()`.
+    await app.processManager.stopAll();
+
     for (const repoPath of repoPaths) {
       rmSync(repoPath, { recursive: true, force: true });
     }
   });
 
-  async function createProject() {
+  async function createProject(overrides: { devCommand?: string } = {}) {
     const repoPath = createGitRepoDir();
     repoPaths.push(repoPath);
 
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: buildCreateProjectInput({ localPath: repoPath }),
+      payload: buildCreateProjectInput({ localPath: repoPath, ...overrides }),
     });
 
     return projectSchema.parse(response.json());
@@ -451,5 +456,158 @@ describe("worktrees plugin", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  async function waitUntil(
+    condition: () => boolean | Promise<boolean>,
+    { timeoutMs = 3000, intervalMs = 20 }: { timeoutMs?: number; intervalMs?: number } = {},
+  ): Promise<void> {
+    const start = Date.now();
+
+    while (!(await condition())) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error("Timed out waiting for condition");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
+  function writeDevScript(scriptBody: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "worktrees-manager-worktrees-plugin-scripts-"));
+    repoPaths.push(dir);
+    const scriptPath = join(dir, "dev.js");
+    writeFileSync(scriptPath, scriptBody);
+
+    return `node ${scriptPath}`;
+  }
+
+  describe("start/stop/logs", () => {
+    it("should start the dev command, mark the worktree as running, and stop it back to stopped", async () => {
+      const devCommand = writeDevScript(
+        "console.log(`listening on ${process.env.PORT}`); setInterval(() => {}, 1000);",
+      );
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-start", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      const startResponse = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/start`,
+      });
+
+      expect(startResponse.statusCode).toBe(200);
+      expect(startResponse.json()).toMatchObject({ processStatus: "running" });
+
+      const stopResponse = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/stop`,
+      });
+
+      expect(stopResponse.statusCode).toBe(200);
+      expect(stopResponse.json()).toMatchObject({ processStatus: "stopped", pid: null });
+
+      const worktrees = await app.inject({
+        method: "GET",
+        url: `/api/projects/${project.id}/worktrees`,
+      });
+      expect(worktrees.json()).toMatchObject([{ processStatus: "stopped", pid: null }]);
+    });
+
+    it("should return 409 when starting a worktree that is already running", async () => {
+      const devCommand = writeDevScript("setInterval(() => {}, 1000);");
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-already-running", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      await app.inject({ method: "POST", url: `/api/worktrees/${worktree.id}/start` });
+      const secondStart = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/start`,
+      });
+
+      expect(secondStart.statusCode).toBe(409);
+    });
+
+    it("should return 409 when stopping a worktree that is not running", async () => {
+      const project = await createProject();
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-not-running", base: { type: "default" } },
+      });
+      const worktree = created.json();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/stop`,
+      });
+
+      expect(response.statusCode).toBe(409);
+    });
+
+    it("should return the log history in chronological order once the process has produced output", async () => {
+      const devCommand = writeDevScript(
+        "console.log('first line'); console.log('second line'); setInterval(() => {}, 1000);",
+      );
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-logs", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      await app.inject({ method: "POST", url: `/api/worktrees/${worktree.id}/start` });
+
+      // No basta con "hay al menos 2 líneas": la línea informativa "▶
+      // Arrancando…" se inserta antes del devCommand real, así que un umbral
+      // por longitud puede quedar satisfecho antes de que llegue "second line".
+      await waitUntil(async () => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/worktrees/${worktree.id}/logs`,
+        });
+        return response
+          .json()
+          .some((entry: { content: string }) => entry.content === "second line");
+      });
+
+      const logsResponse = await app.inject({
+        method: "GET",
+        url: `/api/worktrees/${worktree.id}/logs`,
+      });
+
+      expect(logsResponse.statusCode).toBe(200);
+      // Los últimos dos son las líneas del devCommand real; antes de ellas
+      // hay una línea informativa "▶ Arrancando…" que la propia app inserta.
+      expect(logsResponse.json().slice(-2)).toMatchObject([
+        { stream: "stdout", content: "first line" },
+        { stream: "stdout", content: "second line" },
+      ]);
+    });
+
+    it("should return 404 when starting/stopping/listing logs for a worktree id that does not exist", async () => {
+      const missingId = "00000000-0000-4000-8000-000000000000";
+
+      const responses = await Promise.all([
+        app.inject({ method: "POST", url: `/api/worktrees/${missingId}/start` }),
+        app.inject({ method: "POST", url: `/api/worktrees/${missingId}/stop` }),
+        app.inject({ method: "GET", url: `/api/worktrees/${missingId}/logs` }),
+      ]);
+
+      expect(responses.every((response) => response.statusCode === 404)).toBe(true);
+    });
   });
 });

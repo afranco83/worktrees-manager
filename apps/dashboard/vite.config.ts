@@ -16,6 +16,10 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://localhost:4100",
+      // Sin esto, un socket.io-client sin URL explícita conecta al origin de
+      // la propia página (este dev server), que no proxea upgrades de
+      // WebSocket salvo declaración explícita (`ws: true`).
+      "/socket.io": { target: "http://localhost:4100", ws: true },
     },
   },
   test: {

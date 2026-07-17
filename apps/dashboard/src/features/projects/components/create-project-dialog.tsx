@@ -231,12 +231,17 @@ export function CreateProjectDialog({
                     id="devCommand"
                     placeholder="pnpm dev"
                     aria-invalid={errors.devCommand != null}
-                    aria-describedby={errors.devCommand ? "devCommand-error" : undefined}
+                    aria-describedby={errors.devCommand ? "devCommand-error" : "devCommand-hint"}
                     {...register("devCommand")}
                   />
-                  {errors.devCommand && (
+                  {errors.devCommand ? (
                     <p id="devCommand-error" className="text-sm text-destructive">
                       {errors.devCommand.message}
+                    </p>
+                  ) : (
+                    <p id="devCommand-hint" className="text-sm text-muted-foreground">
+                      El comando debe leer el puerto asignado de la variable de entorno{" "}
+                      <code>PORT</code>.
                     </p>
                   )}
                 </div>

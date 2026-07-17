@@ -1,5 +1,3 @@
-import { Server } from "socket.io";
-
 import { buildApp } from "./app.js";
 import { openRegistry } from "./registry.js";
 
@@ -18,14 +16,6 @@ async function start(): Promise<void> {
   });
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
-
-  const io = new Server(app.server, {
-    cors: { origin: true },
-  });
-
-  io.on("connection", (socket) => {
-    app?.log.info({ socketId: socket.id }, "cliente conectado por WebSocket");
-  });
 }
 
 start().catch((error: unknown) => {
