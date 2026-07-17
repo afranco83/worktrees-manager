@@ -77,7 +77,7 @@ No hay `packages/*` compartidos en v1: `dashboard` y `server` no comparten códi
 
 - `src/settings/` (Fase 4, [ADR-0006](./adr/0006-ajustes-globales-puertos-y-terminal.md)): mismo patrón `schemas.ts`/`repository.ts`/`plugin.ts` que el resto de dominios, persistido en la fila única `app_settings` descrita arriba — no un fichero de configuración aparte.
 - **Terminal preferida**: lista estática y curada de terminales populares por plataforma (`terminalPresets()` en `src/worktrees/terminal.ts`), sin detección en tiempo real de lo que hay instalado. El usuario elige un preset, o escribe un comando personalizado con placeholder `{path}`; ambos se guardan de la misma forma (comando ya resuelto). `null` (por defecto) preserva el fallback automático por plataforma de ADR-0005.
-- **Rango de puertos**: único y global para toda la app (ya no por proyecto, ver §6 de arriba y ADR-0006), configurable desde el mismo diálogo de ajustes en el dashboard.
+- **Rango de puertos**: único y global para toda la app (ya no por proyecto, ver §4 de arriba y ADR-0006), configurable desde el mismo diálogo de ajustes en el dashboard.
 
 ## 6. Config por proyecto (`.worktrees-manager.json`)
 

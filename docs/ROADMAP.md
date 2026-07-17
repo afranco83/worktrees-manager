@@ -61,7 +61,7 @@ Tareas:
 
 **Adenda (2026-07-16)**:
 
-- Se introduce Vitest en `apps/server` (sin DOM, per `ARCHITECTURE.md` §6) y un script `test` a nivel raíz (`pnpm -r --if-present run test`, con `--if-present` porque `apps/dashboard` no tiene tests todavía) + paso nuevo en `ci.yml`.
+- Se introduce Vitest en `apps/server` (sin DOM, per `ARCHITECTURE.md` §7) y un script `test` a nivel raíz (`pnpm -r --if-present run test`, con `--if-present` porque `apps/dashboard` no tiene tests todavía) + paso nuevo en `ci.yml`.
 - Decisiones de esquema (estrategia de migraciones, IDs UUID vs. autoincrementales) documentadas en [ADR-0001](./adr/0001-esquema-datos-y-migraciones-sqlite.md).
 - La política de retención/rotación de `log_entries` sigue sin decidir (el esquema no impone límite): se resuelve en Fase 5, cuando exista el flujo real de escritura de logs.
 
@@ -121,6 +121,8 @@ Tareas:
 - **Worktrees anidados + abrir terminal** ([ADR-0005](./adr/0005-worktrees-anidados-y-abrir-terminal.md)): los worktrees se crean dentro de `.worktrees/` del propio proyecto (antes hermano del repo, generaba desorden al navegar), con `.gitignore` gestionado automáticamente; nueva acción "Abrir terminal" en cada worktree, multiplataforma (macOS/Linux/Windows).
 - **Ajustes globales: terminal preferida + rango de puertos único** ([ADR-0006](./adr/0006-ajustes-globales-puertos-y-terminal.md)): a petición del usuario (usa iTerm2, no la terminal por defecto de macOS), "Abrir terminal" admite un comando preferido elegido de una lista curada por plataforma o uno personalizado, configurable en un nuevo apartado de ajustes globales; el rango de puertos por proyecto (ya vestigial desde que el índice de `worktrees.port` es global) se elimina en favor de un único rango global en ese mismo apartado. Corrección de concurrencia incluida: el lock de creación de worktree pasa de clave por proyecto a clave global, porque con rango global dos proyectos distintos sí pueden competir de verdad por el mismo puerto.
 - **Incidente operativo durante la verificación manual**: un `DELETE` por SQL directo contra el registro real (`~/.worktrees-manager/registry.db`), pensado para limpiar un proyecto de prueba, vació la tabla `projects` completa en vez de solo la fila objetivo. Los datos de git (repos/worktrees reales) no se vieron afectados, solo el registro; se recuperó re-dando de alta el proyecto real vía la propia API. Lección aplicada en adelante: cualquier limpieza de datos de prueba contra el registro real se hace únicamente a través de los endpoints HTTP de la propia app, nunca con SQL directo.
+- **Dos rondas de revisión sobre el "pulido posterior al cierre"**: `/code-review high` (8 ángulos + verificación de 1 voto) encontró y corrigió 10 hallazgos, entre ellos una inyección de comandos real en "abrir terminal" (`JSON.stringify` usado como citado de shell, no protegía frente a `$()`/backticks) y la pérdida de exclusión mutua entre crear/borrar worktrees del mismo proyecto al introducir el lock global de puertos. `react-common:bug-hunter` sobre el mismo diff encontró un hueco adicional: el fix de citado protegía POSIX pero no `cmd.exe` en Windows (`%VAR%` se expande y `&`/`|`/`<`/`>`/`^`/`(`/`)` son metacaracteres incluso entre comillas dobles) — corregido con el algoritmo de [qntm.org/cmd](https://qntm.org/cmd) (el mismo que usa `cross-spawn`).
+- **Mergeada en `main`**: [PR #4](https://github.com/afranco83/worktrees-manager/pull/4), 145 tests backend + 23 tests frontend en verde.
 
 ---
 
