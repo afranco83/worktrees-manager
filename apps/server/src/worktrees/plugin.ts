@@ -140,50 +140,57 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const project = requireProject(fastify.db, request.params.projectId);
 
-      const worktree = await withProjectLock(GLOBAL_PORT_ALLOCATION_LOCK_KEY, async () => {
-        assertValidBranchName(request.body.newBranch);
+      // Doble lock: el de `project.id` mantiene la creación mutuamente excluyente
+      // con el borrado del mismo proyecto (evita `git worktree add`/`remove`
+      // concurrentes sobre el mismo repo); el global serializa la asignación de
+      // puerto entre proyectos distintos, ya que el rango es único para toda la
+      // app (ver ADR-0006).
+      const worktree = await withProjectLock(project.id, () =>
+        withProjectLock(GLOBAL_PORT_ALLOCATION_LOCK_KEY, async () => {
+          assertValidBranchName(request.body.newBranch);
 
-        const baseRef = await resolveBaseRef(project.localPath, request.body.base);
-        const worktreePath = computeWorktreePath(project, request.body.newBranch);
-        ensureWorktreesDirectoryIgnored(project.localPath);
-        const settings = getSettings(fastify.db);
-        const usedPorts = listUsedPorts(fastify.db);
-        const port = await assignFreePort({
-          start: settings.portRangeStart,
-          end: settings.portRangeEnd,
-          usedPorts,
-        });
-
-        await addWorktree({
-          repoPath: project.localPath,
-          worktreePath,
-          newBranch: request.body.newBranch,
-          baseRef,
-        });
-
-        try {
-          return insertWorktree(fastify.db, {
-            projectId: project.id,
-            branch: request.body.newBranch,
-            path: worktreePath,
-            port,
+          const baseRef = await resolveBaseRef(project.localPath, request.body.base);
+          const worktreePath = computeWorktreePath(project, request.body.newBranch);
+          ensureWorktreesDirectoryIgnored(project.localPath);
+          const settings = getSettings(fastify.db);
+          const usedPorts = listUsedPorts(fastify.db);
+          const port = await assignFreePort({
+            start: settings.portRangeStart,
+            end: settings.portRangeEnd,
+            usedPorts,
           });
-        } catch (error) {
-          // El worktree ya se creó en disco (directorio + rama) pero no se pudo
-          // persistir en SQLite (p. ej. carrera de puertos que el índice único
-          // detectó): se compensa borrando ambos para no dejar ni un directorio
-          // huérfano ni una rama huérfana sin worktree asociado.
-          await removeWorktree({ repoPath: project.localPath, worktreePath, force: true }).catch(
-            () => undefined,
-          );
-          await deleteLocalBranch({
-            repoPath: project.localPath,
-            branch: request.body.newBranch,
-          }).catch(() => undefined);
 
-          throw error;
-        }
-      });
+          await addWorktree({
+            repoPath: project.localPath,
+            worktreePath,
+            newBranch: request.body.newBranch,
+            baseRef,
+          });
+
+          try {
+            return insertWorktree(fastify.db, {
+              projectId: project.id,
+              branch: request.body.newBranch,
+              path: worktreePath,
+              port,
+            });
+          } catch (error) {
+            // El worktree ya se creó en disco (directorio + rama) pero no se pudo
+            // persistir en SQLite (p. ej. carrera de puertos que el índice único
+            // detectó): se compensa borrando ambos para no dejar ni un directorio
+            // huérfano ni una rama huérfana sin worktree asociado.
+            await removeWorktree({ repoPath: project.localPath, worktreePath, force: true }).catch(
+              () => undefined,
+            );
+            await deleteLocalBranch({
+              repoPath: project.localPath,
+              branch: request.body.newBranch,
+            }).catch(() => undefined);
+
+            throw error;
+          }
+        }),
+      );
 
       reply.code(201);
 
@@ -232,8 +239,14 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
         throw new NotFoundError(`No existe un worktree con id ${request.params.id}`);
       }
 
-      const { preferredTerminalCommand } = getSettings(fastify.db);
-      await openTerminalAt(worktree.path, { preferredCommand: preferredTerminalCommand });
+      const project = requireProject(fastify.db, worktree.projectId);
+
+      // Mismo lock por proyecto que crear/borrar, para no abrir una terminal
+      // apuntando a un directorio que un borrado concurrente acaba de eliminar.
+      await withProjectLock(project.id, async () => {
+        const { preferredTerminalCommand } = getSettings(fastify.db);
+        await openTerminalAt(worktree.path, { preferredCommand: preferredTerminalCommand });
+      });
 
       reply.code(204).send();
     },

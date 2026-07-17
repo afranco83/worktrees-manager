@@ -13,6 +13,8 @@ const LINUX_TERMINAL_CANDIDATES: Array<{ command: string; args: (path: string) =
   { command: "gnome-terminal", args: (path) => [`--working-directory=${path}`] },
   { command: "konsole", args: (path) => ["--workdir", path] },
   { command: "xfce4-terminal", args: (path) => [`--working-directory=${path}`] },
+  { command: "alacritty", args: (path) => ["--working-directory", path] },
+  { command: "kitty", args: (path) => ["--directory", path] },
   { command: "xterm", args: () => [] },
 ];
 
@@ -30,6 +32,22 @@ function defaultCommandExists(command: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Cita `value` como argumento literal de shell para la plataforma dada. En
+ * Windows los nombres de ruta no pueden contener `"` (carácter reservado del
+ * sistema de ficheros), así que envolver en comillas dobles basta sin escapado
+ * adicional para `cmd.exe`. En POSIX se usan comillas simples (todo literal
+ * salvo una comilla simple, que se cierra/escapa/reabre) — a diferencia de
+ * `JSON.stringify`, que no protege frente a `$()`/backticks de un shell real.
+ */
+function quoteForShell(value: string, platform: NodeJS.Platform): string {
+  if (platform === "win32") {
+    return `"${value}"`;
+  }
+
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 export const systemTerminalLauncher: TerminalLauncher = {
@@ -66,7 +84,7 @@ export function terminalPresets(platform: NodeJS.Platform): Array<{
   if (platform === "win32") {
     return [
       { name: "Windows Terminal", command: "wt -d {path}" },
-      { name: "Símbolo del sistema", command: 'cmd /c start cmd /K "cd /d {path}"' },
+      { name: "Símbolo del sistema", command: "cmd /c start cmd /K cd /d {path}" },
     ];
   }
 
@@ -88,12 +106,10 @@ export async function openTerminalAt(
 
   try {
     if (options.preferredCommand) {
-      // JSON.stringify entrecomilla el path para shells POSIX/Windows ante
-      // rutas con espacios — esfuerzo proporcional, no blindaje total de
-      // shell-injection (mismo criterio ya aceptado en ADR-0005 para el
-      // fallback de cmd.exe: es la propia máquina del usuario configurando su
-      // propio comando, no input de terceros).
-      const resolvedCommand = options.preferredCommand.replaceAll("{path}", JSON.stringify(path));
+      const resolvedCommand = options.preferredCommand.replaceAll(
+        "{path}",
+        quoteForShell(path, launcher.platform),
+      );
       await launcher.runShellCommand(resolvedCommand);
       return;
     }
@@ -121,7 +137,7 @@ export async function openTerminalAt(
 
     throw new TerminalLaunchError(
       "No se ha encontrado ningún emulador de terminal soportado en este sistema " +
-        "(se probó gnome-terminal, konsole, xfce4-terminal y xterm)",
+        "(se probó gnome-terminal, konsole, xfce4-terminal, alacritty, kitty y xterm)",
     );
   } catch (error) {
     if (error instanceof TerminalLaunchError) {

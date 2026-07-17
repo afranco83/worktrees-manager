@@ -19,7 +19,6 @@ export const createProjectFormSchema = z.object({
 });
 
 export type CreateProjectFormValues = z.output<typeof createProjectFormSchema>;
-export type CreateProjectFormInput = z.input<typeof createProjectFormSchema>;
 
 export const updateProjectFormSchema = z.object({
   name: z.string().min(1, "Indica un nombre"),
@@ -27,7 +26,6 @@ export const updateProjectFormSchema = z.object({
 });
 
 export type UpdateProjectFormValues = z.output<typeof updateProjectFormSchema>;
-export type UpdateProjectFormInput = z.input<typeof updateProjectFormSchema>;
 
 export const projectPathLookupSchema = z.object({
   localPath: z.string(),

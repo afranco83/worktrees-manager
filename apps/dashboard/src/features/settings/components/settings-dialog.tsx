@@ -27,6 +27,12 @@ import { useSettings } from "../api/use-settings";
 import { useUpdateSettings } from "../api/use-update-settings";
 import type { TerminalOption } from "../schemas";
 
+// Mismo patrón de sentinel-strings que `create-worktree-form.tsx` (`baseOption`
+// / `decodeBaseOption` / `baseOptionLabel`): el <Select> de shadcn solo admite
+// un valor string plano, así que el comando preferido (string | null, más el
+// caso "personalizado") se codifica como uno de estos sentinels y se decodifica
+// en el submit. Segunda aparición de esta forma en el código — si aparece una
+// tercera, es el momento de extraer un helper común (AHA, no antes).
 const AUTOMATIC_OPTION = "__automatic__";
 const CUSTOM_OPTION = "__custom__";
 const PORT_RANGE_MESSAGE = "El puerto inicial debe ser menor que el puerto final";
@@ -78,6 +84,7 @@ export function SettingsDialog({
     handleSubmit,
     setValue,
     control,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<SettingsFormLocalInput, unknown, SettingsFormLocalValues>({
     resolver: standardSchemaResolver(settingsFormLocalSchema),
@@ -91,24 +98,41 @@ export function SettingsDialog({
 
   const terminalOption = useWatch({ control, name: "terminalOption" });
 
+  // Se resincroniza cada vez que el diálogo se abre (mismo patrón que
+  // EditProjectDialog), no solo la primera vez: el diálogo nunca se desmonta
+  // (el padre solo alterna `open`), así que sin esto un borrador sin guardar
+  // quedaría mostrado como si fuera el valor persistido la próxima vez que se
+  // abra.
   useEffect(() => {
-    if (settingsQuery.data && presetsQuery.data && terminalOption === "") {
+    if (open && settingsQuery.data && presetsQuery.data) {
       const { preferredTerminalCommand, portRangeStart, portRangeEnd } = settingsQuery.data;
-      setValue("portRangeStart", portRangeStart);
-      setValue("portRangeEnd", portRangeEnd);
 
       if (preferredTerminalCommand == null) {
-        setValue("terminalOption", AUTOMATIC_OPTION);
+        reset({
+          portRangeStart,
+          portRangeEnd,
+          terminalOption: AUTOMATIC_OPTION,
+          customCommand: "",
+        });
       } else if (
         presetsQuery.data.presets.some((preset) => preset.command === preferredTerminalCommand)
       ) {
-        setValue("terminalOption", preferredTerminalCommand);
+        reset({
+          portRangeStart,
+          portRangeEnd,
+          terminalOption: preferredTerminalCommand,
+          customCommand: "",
+        });
       } else {
-        setValue("terminalOption", CUSTOM_OPTION);
-        setValue("customCommand", preferredTerminalCommand);
+        reset({
+          portRangeStart,
+          portRangeEnd,
+          terminalOption: CUSTOM_OPTION,
+          customCommand: preferredTerminalCommand,
+        });
       }
     }
-  }, [settingsQuery.data, presetsQuery.data, terminalOption, setValue]);
+  }, [open, settingsQuery.data, presetsQuery.data, reset]);
 
   if (settingsQuery.isLoading || presetsQuery.isLoading) {
     return (

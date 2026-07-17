@@ -5,16 +5,13 @@ import {
   terminalPresetsResponseSchema,
   type AppSettings,
   type TerminalPresetsResponse,
-  type UpdateAppSettingsFormValues,
 } from "../schemas";
 
 export async function fetchSettings(): Promise<AppSettings> {
   return appSettingsSchema.parse(await apiRequest("/api/settings"));
 }
 
-export async function updateSettings(
-  patch: Partial<UpdateAppSettingsFormValues>,
-): Promise<AppSettings> {
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   return appSettingsSchema.parse(
     await apiRequest("/api/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   );

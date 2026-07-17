@@ -132,6 +132,20 @@ describe("app routes", () => {
     expect(await screen.findByText(/no tiene ningún commit/)).toBeInTheDocument();
   });
 
+  it("should explain that the folder needs write permission when it is not writable", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "Añadir proyecto" }));
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/not-writable-repo");
+    await user.tab();
+
+    expect(await screen.findByText(/no tienes permisos de escritura/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Comando de arranque")).toBeDisabled();
+  });
+
   it("should show an error and unblock from the stuck state when the path lookup request fails", async () => {
     server.use(
       http.get("/api/projects/lookup", () =>

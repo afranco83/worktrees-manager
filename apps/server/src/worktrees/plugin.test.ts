@@ -241,6 +241,42 @@ describe("worktrees plugin", () => {
     expect(first.json().port).not.toBe(second.json().port);
   });
 
+  it("should keep create and delete of the same project mutually exclusive when run concurrently", async () => {
+    // Regresión del hallazgo de code-review: al mover la creación al lock
+    // global de puertos, crear y borrar del MISMO proyecto dejaron de
+    // serializarse entre sí (antes ambos usaban `project.id`). El fix anida
+    // el lock por proyecto alrededor del lock global en la creación.
+    const project = await createProject();
+    const existing = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-existing", base: { type: "default" } },
+    });
+
+    expect(existing.statusCode).toBe(201);
+
+    const [deleteResponse, createResponse] = await Promise.all([
+      app.inject({ method: "DELETE", url: `/api/worktrees/${existing.json().id}` }),
+      app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-concurrent-create", base: { type: "default" } },
+      }),
+    ]);
+
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(createResponse.statusCode).toBe(201);
+
+    const remaining = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/worktrees`,
+    });
+
+    expect(remaining.json().map((worktree: { branch: string }) => worktree.branch)).toEqual([
+      "feature-concurrent-create",
+    ]);
+  });
+
   it("should reject creating a worktree with an invalid branch name", async () => {
     const project = await createProject();
 

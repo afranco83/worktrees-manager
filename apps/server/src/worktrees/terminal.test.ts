@@ -116,8 +116,43 @@ describe("openTerminalAt", () => {
       preferredCommand: "open -a iTerm {path}",
     });
 
-    expect(launcher.runShellCommand).toHaveBeenCalledWith('open -a iTerm "/repos/foo"');
+    expect(launcher.runShellCommand).toHaveBeenCalledWith("open -a iTerm '/repos/foo'");
     expect(launcher.run).not.toHaveBeenCalled();
+  });
+
+  it("should single-quote the path on POSIX so shell metacharacters in it are never interpreted", async () => {
+    const launcher = buildLauncher({ platform: "darwin" });
+
+    await openTerminalAt("/repos/feature/$(touch /tmp/pwned)", {
+      launcher,
+      preferredCommand: "open -a iTerm {path}",
+    });
+
+    expect(launcher.runShellCommand).toHaveBeenCalledWith(
+      "open -a iTerm '/repos/feature/$(touch /tmp/pwned)'",
+    );
+  });
+
+  it("should escape an embedded single quote in the path on POSIX", async () => {
+    const launcher = buildLauncher({ platform: "darwin" });
+
+    await openTerminalAt("/repos/it's-a-repo", {
+      launcher,
+      preferredCommand: "open -a iTerm {path}",
+    });
+
+    expect(launcher.runShellCommand).toHaveBeenCalledWith("open -a iTerm '/repos/it'\\''s-a-repo'");
+  });
+
+  it("should double-quote the path on Windows for the preferred command", async () => {
+    const launcher = buildLauncher({ platform: "win32" });
+
+    await openTerminalAt("C:\\repos\\foo bar", {
+      launcher,
+      preferredCommand: "wt -d {path}",
+    });
+
+    expect(launcher.runShellCommand).toHaveBeenCalledWith('wt -d "C:\\repos\\foo bar"');
   });
 
   it("should wrap a failure of the preferred command in TerminalLaunchError", async () => {
@@ -167,4 +202,27 @@ describe("terminalPresets", () => {
       }
     }
   });
+
+  it("should not wrap the Windows cmd.exe preset's {path} in its own quotes (openTerminalAt already quotes it)", () => {
+    const cmdPreset = terminalPresets("win32").find(
+      (preset) => preset.name === "Símbolo del sistema",
+    );
+
+    expect(cmdPreset?.command).toBe("cmd /c start cmd /K cd /d {path}");
+  });
+});
+
+describe("terminalPresets and the Linux auto-detect fallback", () => {
+  // Regresión del hallazgo de code-review: Alacritty y kitty eran seleccionables
+  // como preset en Ajustes pero nunca se probaban en el fallback automático.
+  it.each(["alacritty", "kitty"])(
+    "should auto-detect %s as a fallback, matching its entry in terminalPresets",
+    async (command) => {
+      const launcher = buildLauncher({ platform: "linux", commandExists: (c) => c === command });
+
+      await openTerminalAt("/repos/foo", { launcher });
+
+      expect(launcher.run).toHaveBeenCalledWith(command, expect.any(Array), { cwd: "/repos/foo" });
+    },
+  );
 });

@@ -30,8 +30,6 @@ export const updateAppSettingsSchema = z
     { message: PORT_RANGE_MESSAGE, path: ["portRangeEnd"] },
   );
 
-export type UpdateAppSettingsInput = z.infer<typeof updateAppSettingsSchema>;
-
 export const terminalOptionSchema = z.object({
   name: z.string(),
   command: z.string(),
