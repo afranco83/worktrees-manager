@@ -14,6 +14,8 @@ export class InvalidBranchNameError extends Error {}
 
 export class DefaultBranchNotFoundError extends Error {}
 
+export class CurrentBranchNotFoundError extends Error {}
+
 export class BranchAlreadyExistsError extends Error {}
 
 export class WorktreeHasUncommittedChangesError extends Error {}

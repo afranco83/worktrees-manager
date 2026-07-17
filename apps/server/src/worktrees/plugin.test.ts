@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildApp } from "../app.js";
 import { runMigrations } from "../db/migrate.js";
+import { projectSchema } from "../projects/schemas.js";
 import { buildCreateProjectInput } from "../projects/test-fixtures.js";
 
 function initGitRepo(repoPath: string): void {
@@ -62,7 +63,7 @@ describe("worktrees plugin", () => {
       payload: buildCreateProjectInput({ localPath: repoPath, ...overrides }),
     });
 
-    return response.json() as { id: string; portRangeStart: number; portRangeEnd: number };
+    return projectSchema.parse(response.json());
   }
 
   it("should return 404 for git-info when the project does not exist", async () => {
@@ -88,6 +89,18 @@ describe("worktrees plugin", () => {
       defaultBranch: "main",
       branches: ["main"],
     });
+  });
+
+  it("should return 422 instead of a raw 500 when the project's local path no longer exists on disk", async () => {
+    const project = await createProject();
+    rmSync(project.localPath, { recursive: true, force: true });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/git-info`,
+    });
+
+    expect(response.statusCode).toBe(422);
   });
 
   it("should return an empty array when listing worktrees for a project without any", async () => {
@@ -134,6 +147,27 @@ describe("worktrees plugin", () => {
     });
 
     expect(first.json().port).not.toBe(second.json().port);
+  });
+
+  it("should assign a free port to a second project even when its port range overlaps with the first project's", async () => {
+    const projectA = await createProject({ portRangeStart: 3000, portRangeEnd: 3099 });
+    const projectB = await createProject({ portRangeStart: 3000, portRangeEnd: 3099 });
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectA.id}/worktrees`,
+      payload: { newBranch: "feature-a", base: { type: "default" } },
+    });
+    expect(first.statusCode).toBe(201);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectB.id}/worktrees`,
+      payload: { newBranch: "feature-b", base: { type: "default" } },
+    });
+
+    expect(second.statusCode).toBe(201);
+    expect(second.json().port).not.toBe(first.json().port);
   });
 
   it("should create both worktrees with distinct ports when requested concurrently", async () => {
@@ -193,6 +227,40 @@ describe("worktrees plugin", () => {
       method: "POST",
       url: `/api/projects/${project.id}/worktrees`,
       payload: { newBranch: "feature-a", base: { type: "branch", branch: "does-not-exist" } },
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+
+  it("should create a worktree from the current branch of the main repo", async () => {
+    const project = await createProject();
+    execFileSync("git", ["checkout", "-b", "develop"], { cwd: project.localPath, stdio: "ignore" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-from-current", base: { type: "current" } },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(
+      execFileSync("git", ["branch", "--list", "feature-from-current"], {
+        cwd: project.localPath,
+      }).toString(),
+    ).toContain("feature-from-current");
+  });
+
+  it("should reject creating a worktree from the current branch when the main repo is in detached HEAD", async () => {
+    const project = await createProject();
+    const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: project.localPath })
+      .toString()
+      .trim();
+    execFileSync("git", ["checkout", sha], { cwd: project.localPath, stdio: "ignore" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-a", base: { type: "current" } },
     });
 
     expect(response.statusCode).toBe(422);
@@ -268,5 +336,25 @@ describe("worktrees plugin", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  it("should not crash when two DELETE requests race for the same worktree", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-race", base: { type: "default" } },
+    });
+    const worktree = created.json();
+
+    const [first, second] = await Promise.all([
+      app.inject({ method: "DELETE", url: `/api/worktrees/${worktree.id}` }),
+      app.inject({ method: "DELETE", url: `/api/worktrees/${worktree.id}` }),
+    ]);
+
+    const statusCodes = [first.statusCode, second.statusCode];
+    expect(statusCodes).toContain(204);
+    expect(statusCodes.every((code) => code === 204 || code === 404)).toBe(true);
+    expect(existsSync(worktree.path)).toBe(false);
   });
 });

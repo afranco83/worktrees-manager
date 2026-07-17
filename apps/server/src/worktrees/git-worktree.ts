@@ -53,7 +53,13 @@ export async function resolveDefaultBranch(repoPath: string): Promise<string> {
     const match = /^refs\/remotes\/origin\/(.+)$/.exec(stdout.trim());
 
     if (match) {
-      return match[1];
+      const branch = match[1];
+
+      // Si no hay rama LOCAL con ese nombre, devolver el nombre pelado como
+      // `baseRef` deja que `git worktree add -b <nueva> <path> <nombre>` dispare
+      // el DWIM de git (crea/checkea una rama local con ese nombre, ignorando
+      // por completo `-b <nueva>`). La referencia remota completa es inequívoca.
+      return (await localBranchExists(repoPath, branch)) ? branch : `origin/${branch}`;
     }
   } catch {
     // Sin remoto configurado o sin HEAD simbólico: se prueban los fallbacks locales.
@@ -121,7 +127,10 @@ export async function addWorktree({
   } catch (error) {
     const stderr = readStderr(error);
 
-    if (/already exists/.test(stderr)) {
+    // Regex específico: git usa "already exists" también para "la ruta del
+    // worktree ya existe en disco" (directorio residual de un intento
+    // anterior), un conflicto de filesystem distinto a una rama duplicada.
+    if (/a branch named .* already exists/.test(stderr)) {
       throw new BranchAlreadyExistsError(`La rama "${newBranch}" ya existe`);
     }
 
@@ -129,6 +138,16 @@ export async function addWorktree({
       stderr || (error instanceof Error ? error.message : String(error)),
     );
   }
+}
+
+export async function deleteLocalBranch({
+  repoPath,
+  branch,
+}: {
+  repoPath: string;
+  branch: string;
+}): Promise<void> {
+  await execa("git", ["branch", "-D", branch], { cwd: repoPath, env: GIT_ENV });
 }
 
 export async function removeWorktree({

@@ -9,6 +9,7 @@ import {
 
 import {
   BranchAlreadyExistsError,
+  CurrentBranchNotFoundError,
   DefaultBranchNotFoundError,
   DuplicateProjectPathError,
   ForbiddenDirectoryPathError,
@@ -95,8 +96,23 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
       error instanceof InvalidDirectoryPathError ||
       error instanceof InvalidBranchNameError ||
       error instanceof DefaultBranchNotFoundError ||
-      error instanceof GitWorktreeOperationError
+      error instanceof CurrentBranchNotFoundError
     ) {
+      sendErrorResponse({
+        reply,
+        statusCode: 422,
+        error: "Unprocessable Entity",
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error instanceof GitWorktreeOperationError) {
+      // A diferencia de los 422 de validación de arriba, este es el fallback
+      // genérico de un fallo real de `git` (disco lleno, permisos, .git
+      // corrupto...) — se loguea igual que un 500 para no perder visibilidad
+      // operativa, aunque el status que ve el cliente siga siendo 422.
+      request.log.error(error);
       sendErrorResponse({
         reply,
         statusCode: 422,

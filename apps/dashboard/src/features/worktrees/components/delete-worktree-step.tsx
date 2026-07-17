@@ -47,15 +47,23 @@ export function DeleteWorktreeStep({
         </p>
       )}
       <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel} disabled={deleteWorktree.isPending}>
           Cancelar
         </Button>
         {hasUncommittedChanges ? (
-          <Button variant="destructive" onClick={() => void handleConfirm(true)}>
+          <Button
+            variant="destructive"
+            onClick={() => void handleConfirm(true)}
+            disabled={deleteWorktree.isPending}
+          >
             Forzar borrado
           </Button>
         ) : (
-          <Button variant="destructive" onClick={() => void handleConfirm(false)}>
+          <Button
+            variant="destructive"
+            onClick={() => void handleConfirm(false)}
+            disabled={deleteWorktree.isPending}
+          >
             Borrar
           </Button>
         )}

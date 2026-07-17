@@ -44,7 +44,8 @@ describe("worktrees repository", () => {
     expect(getWorktreeById(db, "00000000-0000-4000-8000-000000000000")).toBeNull();
   });
 
-  it("should list the ports already used by a project's worktrees", () => {
+  it("should list the ports already used across all projects, not just one", () => {
+    const otherProjectId = insertProject(db, buildCreateProjectInput()).id;
     insertWorktree(db, {
       projectId,
       branch: "feature-a",
@@ -52,13 +53,13 @@ describe("worktrees repository", () => {
       port: 4100,
     });
     insertWorktree(db, {
-      projectId,
+      projectId: otherProjectId,
       branch: "feature-b",
-      path: "/repos/foo.worktrees/feature-b",
+      path: "/repos/bar.worktrees/feature-b",
       port: 4101,
     });
 
-    expect(listUsedPorts(db, projectId)).toEqual(expect.arrayContaining([4100, 4101]));
+    expect(listUsedPorts(db)).toEqual(expect.arrayContaining([4100, 4101]));
   });
 
   it("should throw NoFreePortAvailableError when the port is already taken by another worktree", () => {

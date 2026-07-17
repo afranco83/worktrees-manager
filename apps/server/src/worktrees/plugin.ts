@@ -1,12 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { DefaultBranchNotFoundError, NotFoundError } from "../errors.js";
+import { CurrentBranchNotFoundError, GitWorktreeOperationError, NotFoundError } from "../errors.js";
 import { getProjectById } from "../projects/repository.js";
 import {
   addWorktree,
   assertValidBranchName,
   computeWorktreePath,
+  deleteLocalBranch,
   getCurrentBranch,
   listLocalBranches,
   removeWorktree,
@@ -43,7 +44,7 @@ async function resolveBaseRef(repoPath: string, base: WorktreeBase): Promise<str
   const currentBranch = await getCurrentBranch(repoPath);
 
   if (currentBranch == null) {
-    throw new DefaultBranchNotFoundError(
+    throw new CurrentBranchNotFoundError(
       "El repositorio principal está en detached HEAD; indica una rama concreta",
     );
   }
@@ -73,11 +74,27 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const project = requireProject(fastify.db, request.params.projectId);
 
-      const [currentBranch, branches, defaultBranch] = await Promise.all([
-        getCurrentBranch(project.localPath),
-        listLocalBranches(project.localPath),
-        resolveDefaultBranch(project.localPath).catch(() => null),
-      ]);
+      let currentBranch: string | null;
+      let branches: string[];
+      let defaultBranch: string | null;
+
+      try {
+        [currentBranch, branches, defaultBranch] = await Promise.all([
+          getCurrentBranch(project.localPath),
+          listLocalBranches(project.localPath),
+          resolveDefaultBranch(project.localPath).catch(() => null),
+        ]);
+      } catch (error) {
+        // getCurrentBranch/listLocalBranches no capturan sus propios fallos (a
+        // diferencia de resolveDefaultBranch, cuyo caso "sin rama por defecto"
+        // es legítimo y se trata arriba): si rechazan, es porque `project.localPath`
+        // ya no es un repo git válido (p. ej. se movió/borró tras el alta).
+        throw new GitWorktreeOperationError(
+          `No se pudo leer la información git de "${project.localPath}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
 
       return { currentBranch, defaultBranch, branches };
     },
@@ -115,7 +132,7 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
         const baseRef = await resolveBaseRef(project.localPath, request.body.base);
         const worktreePath = computeWorktreePath(project, request.body.newBranch);
-        const usedPorts = listUsedPorts(fastify.db, project.id);
+        const usedPorts = listUsedPorts(fastify.db);
         const port = await assignFreePort({
           start: project.portRangeStart,
           end: project.portRangeEnd,
@@ -137,12 +154,17 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
             port,
           });
         } catch (error) {
-          // El worktree ya se creó en disco pero no se pudo persistir en SQLite
-          // (p. ej. carrera de puertos que el índice único detectó): se compensa
-          // borrándolo de disco antes de relanzar, para no dejarlo huérfano.
+          // El worktree ya se creó en disco (directorio + rama) pero no se pudo
+          // persistir en SQLite (p. ej. carrera de puertos que el índice único
+          // detectó): se compensa borrando ambos para no dejar ni un directorio
+          // huérfano ni una rama huérfana sin worktree asociado.
           await removeWorktree({ repoPath: project.localPath, worktreePath, force: true }).catch(
             () => undefined,
           );
+          await deleteLocalBranch({
+            repoPath: project.localPath,
+            branch: request.body.newBranch,
+          }).catch(() => undefined);
 
           throw error;
         }
@@ -171,13 +193,15 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       const project = requireProject(fastify.db, worktree.projectId);
 
-      await removeWorktree({
-        repoPath: project.localPath,
-        worktreePath: worktree.path,
-        force: request.query.force,
-      });
+      await withProjectLock(project.id, async () => {
+        await removeWorktree({
+          repoPath: project.localPath,
+          worktreePath: worktree.path,
+          force: request.query.force,
+        });
 
-      deleteWorktree(fastify.db, worktree.id);
+        deleteWorktree(fastify.db, worktree.id);
+      });
 
       reply.code(204).send();
     },

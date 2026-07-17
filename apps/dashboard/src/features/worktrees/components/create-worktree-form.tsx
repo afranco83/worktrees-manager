@@ -17,13 +17,17 @@ import {
 
 import { useCreateWorktree } from "../api/use-create-worktree";
 import { useProjectGitInfo } from "../api/use-project-git-info";
-import type { ProjectGitInfo, WorktreeBase } from "../schemas";
+import { createWorktreeFormSchema, type ProjectGitInfo, type WorktreeBase } from "../schemas";
 
 const DEFAULT_BASE_OPTION = "__default__";
 const CURRENT_BASE_OPTION = "__current__";
 
+// `baseOption` es un string plano (no el discriminated union WorktreeBase de
+// createWorktreeFormSchema) porque el <Select> de shadcn solo admite un único
+// valor string — decodeBaseOption lo traduce de vuelta antes de enviarlo.
+// `newBranch` sí reutiliza la validación del schema de dominio.
 const createWorktreeFormLocalSchema = z.object({
-  newBranch: z.string().min(1, "Indica el nombre de la nueva rama"),
+  newBranch: createWorktreeFormSchema.shape.newBranch,
   baseOption: z.string().min(1, "Elige la rama base"),
 });
 

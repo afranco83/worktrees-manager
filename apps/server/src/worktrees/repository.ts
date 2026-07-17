@@ -46,10 +46,15 @@ export function getWorktreeById(db: Database.Database, id: string): Worktree | n
   return row ? toWorktree(row) : null;
 }
 
-export function listUsedPorts(db: Database.Database, projectId: string): number[] {
+/**
+ * Los puertos son un recurso de la máquina, no del proyecto (ver el índice
+ * único global de la migración `0002_worktrees_port_unique`): se excluyen los
+ * puertos usados por CUALQUIER worktree, no solo los del proyecto actual.
+ */
+export function listUsedPorts(db: Database.Database): number[] {
   return db
-    .prepare<[string], { port: number }>("SELECT port FROM worktrees WHERE project_id = ?")
-    .all(projectId)
+    .prepare<[], { port: number }>("SELECT port FROM worktrees")
+    .all()
     .map((row) => row.port);
 }
 
