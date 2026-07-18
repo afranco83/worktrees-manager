@@ -22,7 +22,15 @@ export async function fetchProjectPathLookup(localPath: string): Promise<Project
 
 export async function createProject(input: CreateProjectFormValues): Promise<Project> {
   return projectSchema.parse(
-    await apiRequest("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+    await apiRequest("/api/projects", {
+      method: "POST",
+      // Vacío = sin comando posterior a la creación; el backend distingue
+      // "sin comando" con `null`, no con una string vacía.
+      body: JSON.stringify({
+        ...input,
+        postCreateCommand: input.postCreateCommand.trim() || null,
+      }),
+    }),
   );
 }
 
@@ -34,7 +42,10 @@ export async function updateProject({
   patch: UpdateProjectFormValues;
 }): Promise<Project> {
   return projectSchema.parse(
-    await apiRequest(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    await apiRequest(`/api/projects/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...patch, postCreateCommand: patch.postCreateCommand.trim() || null }),
+    }),
   );
 }
 

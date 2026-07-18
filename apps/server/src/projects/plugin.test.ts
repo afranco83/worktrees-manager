@@ -211,6 +211,48 @@ describe("projects plugin", () => {
     expect(readProjectConfigFile(repoPath)).toMatchObject({ devCommand: "npm start" });
   });
 
+  it("should create a project with a postCreateCommand and default it to null when omitted", async () => {
+    const withCommand = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({
+        localPath: trackRepoPath(),
+        postCreateCommand: "pnpm db:migrate",
+      }),
+    });
+    expect(withCommand.json()).toMatchObject({ postCreateCommand: "pnpm db:migrate" });
+
+    const withoutCommand = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({ localPath: trackRepoPath() }),
+    });
+    expect(withoutCommand.json()).toMatchObject({ postCreateCommand: null });
+  });
+
+  it("should set and clear a project's postCreateCommand via PATCH", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({ localPath: trackRepoPath() }),
+    });
+    const project = created.json();
+
+    const withCommand = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { postCreateCommand: "pnpm db:migrate" },
+    });
+    expect(withCommand.json()).toMatchObject({ postCreateCommand: "pnpm db:migrate" });
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { postCreateCommand: null },
+    });
+    expect(cleared.json()).toMatchObject({ postCreateCommand: null });
+  });
+
   it("should return 404 when updating a project id that does not exist", async () => {
     const response = await app.inject({
       method: "PATCH",

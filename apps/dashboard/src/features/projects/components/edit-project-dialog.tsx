@@ -35,12 +35,20 @@ export function EditProjectDialog({
     formState: { errors, isSubmitting },
   } = useForm<UpdateProjectFormValues>({
     resolver: standardSchemaResolver(updateProjectFormSchema),
-    defaultValues: { name: project.name, devCommand: project.devCommand },
+    defaultValues: {
+      name: project.name,
+      devCommand: project.devCommand,
+      postCreateCommand: project.postCreateCommand ?? "",
+    },
   });
 
   useEffect(() => {
     if (open) {
-      reset({ name: project.name, devCommand: project.devCommand });
+      reset({
+        name: project.name,
+        devCommand: project.devCommand,
+        postCreateCommand: project.postCreateCommand ?? "",
+      });
     }
   }, [open, project, reset]);
 
@@ -97,6 +105,20 @@ export function EditProjectDialog({
                 El comando debe leer el puerto asignado de la variable de entorno <code>PORT</code>.
               </p>
             )}
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="edit-postCreateCommand">Comando posterior a la creación</Label>
+            <Input
+              id="edit-postCreateCommand"
+              placeholder="Opcional, p. ej. pnpm db:migrate"
+              aria-describedby="edit-postCreateCommand-hint"
+              {...register("postCreateCommand")}
+            />
+            <p id="edit-postCreateCommand-hint" className="text-sm text-muted-foreground">
+              Opcional. Se ejecuta una sola vez, automáticamente, justo tras crear cada worktree de
+              este proyecto (p. ej. migrar o poblar una base de datos local).
+            </p>
           </div>
 
           {updateProject.isError && (

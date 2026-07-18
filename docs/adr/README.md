@@ -16,3 +16,4 @@ A diferencia de otros repos propios sobre el mismo modelo documental, aquí no h
 | [0008](./0008-deteccion-de-puertos-y-feedback-de-arranque.md) | Detección de puertos reales vía regex sobre logs (no escaneo de SO), evento `process-step`, fix de atribución de `log-entry` por sala               |
 | [0009](./0009-comando-de-arranque-por-worktree.md)            | Override de `devCommand` por worktree (texto libre) en vez de checkboxes + orquestación propia por app                                              |
 | [0010](./0010-copia-de-ficheros-env-al-crear-un-worktree.md)  | Copia automática de `.env*` gitignoreados al crear un worktree, vía `git ls-files --others --ignored` (no reimplementa el matching de `.gitignore`) |
+| [0011](./0011-comando-posterior-a-la-creacion.md)             | Comando posterior a la creación, configurable por proyecto, para bootstrap automático (migrar/seedear una BD local) tras crear cada worktree        |

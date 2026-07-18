@@ -9,12 +9,14 @@ const createProjectRequestSchema = z.object({
   localPath: z.string(),
   name: z.string(),
   devCommand: z.string(),
+  postCreateCommand: z.string().nullable(),
 });
 
 const updateProjectRequestSchema = z
   .object({
     name: z.string(),
     devCommand: z.string(),
+    postCreateCommand: z.string().nullable(),
   })
   .partial();
 

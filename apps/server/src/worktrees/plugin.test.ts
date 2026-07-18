@@ -55,7 +55,9 @@ describe("worktrees plugin", () => {
     }
   });
 
-  async function createProject(overrides: { devCommand?: string } = {}) {
+  async function createProject(
+    overrides: { devCommand?: string; postCreateCommand?: string } = {},
+  ) {
     const repoPath = createGitRepoDir();
     repoPaths.push(repoPath);
 
@@ -184,6 +186,61 @@ describe("worktrees plugin", () => {
     const worktree = response.json();
     expect(readFileSync(join(worktree.path, "apps", "api", ".env"), "utf-8")).toBe(
       "DATABASE_URL=postgres://local\n",
+    );
+  });
+
+  // `node_modules` versionado (con un fichero cualquiera dentro) para que
+  // `git worktree add` lo materialice también en el worktree nuevo — evita
+  // que el paso de instalación automática de `runPostCreateCommand` (ver
+  // ADR-0011) se dispare en estos tests, que solo cubren el propio comando.
+  function trackNodeModulesInRepo(repoPath: string): void {
+    mkdirSync(join(repoPath, "node_modules"), { recursive: true });
+    writeFileSync(join(repoPath, "node_modules", ".gitkeep"), "");
+    execFileSync("git", ["add", "node_modules"], { cwd: repoPath, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "track node_modules for tests"], {
+      cwd: repoPath,
+      stdio: "ignore",
+    });
+  }
+
+  it("should run the project's postCreateCommand once, right after creating a worktree", async () => {
+    const project = await createProject({ postCreateCommand: "echo 'entorno preparado'" });
+    trackNodeModulesInRepo(project.localPath);
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-post-create", base: { type: "default" } },
+    });
+    const worktree = created.json();
+
+    const logs = await app.inject({
+      method: "GET",
+      url: `/api/worktrees/${worktree.id}/logs`,
+    });
+
+    expect(logs.json().map((entry: { content: string }) => entry.content)).toEqual(
+      expect.arrayContaining(["entorno preparado", "✓ Comando posterior a la creación completado"]),
+    );
+  });
+
+  it("should still create the worktree when postCreateCommand fails, only logging the failure", async () => {
+    const project = await createProject({ postCreateCommand: "exit 1" });
+    trackNodeModulesInRepo(project.localPath);
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-post-create-fails", base: { type: "default" } },
+    });
+
+    expect(created.statusCode).toBe(201);
+    const worktree = created.json();
+    expect(existsSync(worktree.path)).toBe(true);
+
+    const logs = await app.inject({ method: "GET", url: `/api/worktrees/${worktree.id}/logs` });
+    expect(logs.json().map((entry: { content: string }) => entry.content)).toContain(
+      "✗ Comando posterior a la creación ha fallado (código 1)",
     );
   });
 

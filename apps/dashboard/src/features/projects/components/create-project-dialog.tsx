@@ -88,7 +88,7 @@ export function CreateProjectDialog({
     formState: { errors, isSubmitting },
   } = useForm<CreateProjectFormValues>({
     resolver: standardSchemaResolver(createProjectFormSchema),
-    defaultValues: { localPath: "", name: "", devCommand: "" },
+    defaultValues: { localPath: "", name: "", devCommand: "", postCreateCommand: "" },
   });
 
   const watchedLocalPath = useWatch({ control, name: "localPath" });
@@ -244,6 +244,20 @@ export function CreateProjectDialog({
                       <code>PORT</code>.
                     </p>
                   )}
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="postCreateCommand">Comando posterior a la creación</Label>
+                  <Input
+                    id="postCreateCommand"
+                    placeholder="Opcional, p. ej. pnpm db:migrate"
+                    aria-describedby="postCreateCommand-hint"
+                    {...register("postCreateCommand")}
+                  />
+                  <p id="postCreateCommand-hint" className="text-sm text-muted-foreground">
+                    Opcional. Se ejecuta una sola vez, automáticamente, justo tras crear cada
+                    worktree de este proyecto (p. ej. migrar o poblar una base de datos local).
+                  </p>
                 </div>
               </fieldset>
 

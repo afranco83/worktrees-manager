@@ -18,6 +18,7 @@ import {
 } from "./git-worktree.js";
 import { listRecentLogEntries } from "./log-repository.js";
 import { assignFreePort } from "./port-allocator.js";
+import { runPostCreateCommand } from "./post-create-command.js";
 import type { ProcessManager } from "./process-manager.js";
 import { withProjectLock } from "./project-lock.js";
 import {
@@ -233,6 +234,25 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
           }
         }),
       );
+
+      if (project.postCreateCommand != null) {
+        await runPostCreateCommand({
+          db: fastify.db,
+          io: fastify.io,
+          worktreeId: worktree.id,
+          worktreePath: worktree.path,
+          command: project.postCreateCommand,
+        }).catch((error: unknown) => {
+          // El propio `runPostCreateCommand` ya vuelca el fallo como log del
+          // worktree (código de salida != 0 sin lanzar); este catch es un
+          // backstop para un fallo genuinamente inesperado (p. ej. el `cwd`
+          // no existe), que tampoco debe tirar abajo la creación ya hecha.
+          request.log.warn(
+            { err: error },
+            `El comando posterior a la creación no se ha podido ejecutar para el worktree ${worktree.id}`,
+          );
+        });
+      }
 
       reply.code(201);
 

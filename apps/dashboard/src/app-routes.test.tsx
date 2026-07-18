@@ -23,6 +23,7 @@ function buildProject(overrides: Partial<Project> = {}): Project {
     name: faker.company.name(),
     localPath: `/repos/${faker.helpers.slugify(faker.company.name()).toLowerCase()}`,
     devCommand: "pnpm dev",
+    postCreateCommand: null,
     repoOwner: null,
     repoName: null,
     createdAt: faker.date.recent().toISOString(),
@@ -217,6 +218,26 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     expect(await screen.findByRole("heading", { name: "renamed-project" })).toBeInTheDocument();
+  });
+
+  it("should set the project's post-create command when the edit form is submitted", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByRole("heading", { name: EXISTING_PROJECT.name });
+    await user.click(screen.getByRole("button", { name: "Editar proyecto" }));
+
+    await user.type(screen.getByLabelText("Comando posterior a la creación"), "pnpm db:migrate");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Comando posterior a la creación")).not.toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "Editar proyecto" }));
+
+    expect(screen.getByLabelText("Comando posterior a la creación")).toHaveValue("pnpm db:migrate");
   });
 
   it("should navigate back to the empty state when the only project is deleted", async () => {
