@@ -161,6 +161,32 @@ describe("worktrees plugin", () => {
     ).not.toContain(".worktrees/feature-nested");
   });
 
+  it("should copy the project's gitignored .env files into a newly created worktree", async () => {
+    const project = await createProject();
+    writeFileSync(join(project.localPath, ".gitignore"), ".env\n.env.*\n!.env.example\n");
+    execFileSync("git", ["add", ".gitignore"], { cwd: project.localPath, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "ignore env files"], {
+      cwd: project.localPath,
+      stdio: "ignore",
+    });
+    mkdirSync(join(project.localPath, "apps", "api"), { recursive: true });
+    writeFileSync(
+      join(project.localPath, "apps", "api", ".env"),
+      "DATABASE_URL=postgres://local\n",
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-env", base: { type: "default" } },
+    });
+
+    const worktree = response.json();
+    expect(readFileSync(join(worktree.path, "apps", "api", ".env"), "utf-8")).toBe(
+      "DATABASE_URL=postgres://local\n",
+    );
+  });
+
   it("should assign non-colliding ports to two worktrees of the same project", async () => {
     const project = await createProject();
 

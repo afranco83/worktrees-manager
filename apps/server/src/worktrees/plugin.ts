@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CurrentBranchNotFoundError, GitWorktreeOperationError, NotFoundError } from "../errors.js";
 import { getProjectById } from "../projects/repository.js";
 import { getSettings } from "../settings/repository.js";
+import { copyGitignoredEnvFiles } from "./env-files.js";
 import {
   addWorktree,
   assertValidBranchName,
@@ -196,6 +197,16 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
             worktreePath,
             newBranch: request.body.newBranch,
             baseRef,
+          });
+
+          // Best-effort: un worktree nuevo es perfectamente usable sin sus
+          // `.env*` (el usuario puede copiarlos a mano), así que un fallo aquí
+          // no debe tirar abajo la creación entera — solo se deja constancia.
+          await copyGitignoredEnvFiles(project.localPath, worktreePath).catch((error: unknown) => {
+            request.log.warn(
+              { err: error },
+              `No se han podido copiar los ficheros .env al worktree ${worktreePath}`,
+            );
           });
 
           try {
