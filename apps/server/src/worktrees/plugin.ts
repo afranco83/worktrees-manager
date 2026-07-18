@@ -35,6 +35,7 @@ import {
   projectIdParamsSchema,
   worktreeIdParamsSchema,
   worktreeSchema,
+  type DetectedPort,
   type WorktreeBase,
 } from "./schemas.js";
 import { openTerminalAt } from "./terminal.js";
@@ -97,7 +98,7 @@ function requireWorktree(db: Parameters<typeof getWorktreeById>[0], id: string) 
 function withDetectedPorts<T extends { id: string }>(
   processManager: ProcessManager,
   worktree: T,
-): T & { detectedPorts: number[] } {
+): T & { detectedPorts: DetectedPort[] } {
   return { ...worktree, detectedPorts: processManager.getDetectedPorts(worktree.id) };
 }
 

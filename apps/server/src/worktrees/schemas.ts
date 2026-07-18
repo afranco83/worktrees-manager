@@ -3,6 +3,17 @@ import { z } from "zod";
 export const WORKTREE_PROCESS_STATUSES = ["stopped", "starting", "running", "error"] as const;
 export type WorktreeProcessStatus = (typeof WORKTREE_PROCESS_STATUSES)[number];
 
+// Un monorepo (turbo, npm/pnpm workspaces...) puede levantar varias apps a la
+// vez, cada una con su propio puerto — `label` es el nombre de la app cuando
+// se puede extraer del prefijo de log de un orquestador (turbo: `paquete:tarea:
+// `), `null` si no (repo de una sola app, o formato de log no reconocido).
+export const detectedPortSchema = z.object({
+  port: z.number().int(),
+  label: z.string().nullable(),
+});
+
+export type DetectedPort = z.infer<typeof detectedPortSchema>;
+
 export const worktreeSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string().uuid(),
@@ -18,7 +29,7 @@ export const worktreeSchema = z.object({
   // reales anunciados en los logs — un monorepo con varias apps (turbo, npm
   // workspaces...) puede levantar varios puertos distintos del único `port`
   // asignado, que solo es el que se pasa como variable de entorno PORT.
-  detectedPorts: z.array(z.number().int()),
+  detectedPorts: z.array(detectedPortSchema),
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;
@@ -124,7 +135,7 @@ export type ProcessStepEvent = z.infer<typeof processStepEventSchema>;
 
 export const detectedPortsEventSchema = z.object({
   worktreeId: z.string().uuid(),
-  ports: z.array(z.number().int()),
+  ports: z.array(detectedPortSchema),
 });
 
 export type DetectedPortsEvent = z.infer<typeof detectedPortsEventSchema>;

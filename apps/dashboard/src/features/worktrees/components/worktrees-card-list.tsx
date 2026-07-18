@@ -16,7 +16,13 @@ import { useOpenWorktreeTerminal } from "../api/use-open-worktree-terminal";
 import { useStartWorktree } from "../api/use-start-worktree";
 import { useStopWorktree } from "../api/use-stop-worktree";
 import { stripAnsiCodes } from "../lib/strip-ansi-codes";
-import type { LogEntry, Worktree, WorktreeProcessStatus, WorktreeProcessStep } from "../schemas";
+import type {
+  DetectedPort,
+  LogEntry,
+  Worktree,
+  WorktreeProcessStatus,
+  WorktreeProcessStep,
+} from "../schemas";
 import { WorktreeLogsDialog } from "./worktree-logs-dialog";
 
 const PROCESS_STATUS_LABELS: Record<WorktreeProcessStatus, string> = {
@@ -41,18 +47,42 @@ const PROCESS_STEP_LABELS: Record<WorktreeProcessStep, string> = {
   "starting-dev-command": "Arrancando comando de dev…",
 };
 
+function PortLink({ port, label }: { port: number; label?: string | null }) {
+  return (
+    <a
+      href={`http://localhost:${port}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline-offset-2 hover:underline"
+    >
+      {label ? `${label}: ${port}` : `Puerto ${port}`}
+    </a>
+  );
+}
+
 // Un monorepo con varias apps (turbo, workspaces...) puede levantar más de un
 // puerto real; el único `port` asignado solo es el que se pasa como PORT al
 // devCommand, así que en cuanto se detectan puertos reales en los logs se
-// muestran esos en su lugar (ver ADR-0007 y el hallazgo de UX sobre esto).
-function portsLabel(worktree: Worktree): string {
-  if (worktree.detectedPorts.length === 0) {
-    return `Puerto ${worktree.port}`;
+// muestran esos en su lugar, con la app que los anuncia si se pudo extraer
+// del prefijo de log (ver ADR-0007/ADR-0008). Solo son clicables mientras el
+// entorno está corriendo — un puerto parado no tiene nada escuchando.
+function WorktreePorts({ worktree }: { worktree: Worktree }) {
+  if (worktree.processStatus !== "running") {
+    return <p className="text-sm text-muted-foreground">Puerto {worktree.port}</p>;
   }
 
-  return worktree.detectedPorts.length === 1
-    ? `Puerto ${worktree.detectedPorts[0]}`
-    : `Puertos ${worktree.detectedPorts.join(", ")}`;
+  const ports: DetectedPort[] =
+    worktree.detectedPorts.length > 0
+      ? worktree.detectedPorts
+      : [{ port: worktree.port, label: null }];
+
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+      {ports.map(({ port, label }) => (
+        <PortLink key={port} port={port} label={label} />
+      ))}
+    </div>
+  );
 }
 
 function WorktreeCard({
@@ -113,7 +143,7 @@ function WorktreeCard({
           <Badge variant={PROCESS_STATUS_BADGE_VARIANTS[worktree.processStatus]}>
             {PROCESS_STATUS_LABELS[worktree.processStatus]}
           </Badge>
-          <p className="text-sm text-muted-foreground">{portsLabel(worktree)}</p>
+          <WorktreePorts worktree={worktree} />
         </div>
         {isTransitioning && step != null && (
           <p className="text-sm text-muted-foreground">{PROCESS_STEP_LABELS[step]}</p>

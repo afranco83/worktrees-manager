@@ -552,7 +552,7 @@ describe("worktrees plugin", () => {
         method: "GET",
         url: `/api/projects/${project.id}/worktrees`,
       });
-      expect(worktrees.json()).toMatchObject([{ detectedPorts: [3001] }]);
+      expect(worktrees.json()).toMatchObject([{ detectedPorts: [{ port: 3001, label: null }] }]);
     });
 
     it("should return 409 when starting a worktree that is already running", async () => {

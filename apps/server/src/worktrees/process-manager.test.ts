@@ -410,10 +410,18 @@ describe("process manager", () => {
       await manager.start(worktree, project);
       await waitUntil(() => manager.getDetectedPorts(worktree.id).length >= 2);
 
-      expect(manager.getDetectedPorts(worktree.id)).toEqual([3001, 6006]);
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([
+        { port: 3001, label: null },
+        { port: 6006, label: null },
+      ]);
 
       const portEvents = emitted.filter((entry) => entry.event === "detected-ports");
-      expect(portEvents.at(-1)?.payload).toMatchObject({ ports: [3001, 6006] });
+      expect(portEvents.at(-1)?.payload).toMatchObject({
+        ports: [
+          { port: 3001, label: null },
+          { port: 6006, label: null },
+        ],
+      });
     });
 
     it("should not detect the same port twice", async () => {
@@ -428,8 +436,35 @@ describe("process manager", () => {
       // Da tiempo a que la segunda línea (idéntica) se procese también.
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(manager.getDetectedPorts(worktree.id)).toEqual([3001]);
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([{ port: 3001, label: null }]);
       expect(emitted.filter((entry) => entry.event === "detected-ports")).toHaveLength(1);
+    });
+
+    it("should label each detected port with its app when the output is prefixed turbo-style", async () => {
+      const { worktree, project } = setUpWorktree(
+        `console.log('storefront:dev: - Local: http://localhost:3000');
+         console.log('@store-demo/api:dev: - Local: http://localhost:4000');
+         setInterval(() => {}, 1000);`,
+      );
+
+      await manager.start(worktree, project);
+      await waitUntil(() => manager.getDetectedPorts(worktree.id).length >= 2);
+
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([
+        { port: 3000, label: "storefront" },
+        { port: 4000, label: "api" },
+      ]);
+    });
+
+    it("should not mistake a timestamp-like prefix for an app label", async () => {
+      const { worktree, project } = setUpWorktree(
+        "console.log('10:30:00 Local: http://localhost:3001'); setInterval(() => {}, 1000);",
+      );
+
+      await manager.start(worktree, project);
+      await waitUntil(() => manager.getDetectedPorts(worktree.id).length >= 1);
+
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([{ port: 3001, label: null }]);
     });
 
     it("should clear detected ports once the worktree is stopped", async () => {

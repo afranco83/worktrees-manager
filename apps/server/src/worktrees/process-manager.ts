@@ -20,7 +20,12 @@ import {
 } from "./package-manager.js";
 import { withProjectLock } from "./project-lock.js";
 import { updateWorktreeProcessState } from "./repository.js";
-import type { Worktree, WorktreeProcessStatus, WorktreeProcessStep } from "./schemas.js";
+import type {
+  DetectedPort,
+  Worktree,
+  WorktreeProcessStatus,
+  WorktreeProcessStep,
+} from "./schemas.js";
 
 // Poda cada N líneas nuevas en caliente (nunca por-línea) — ver también la
 // poda puntual en `'exit'` y el barrido de `pruneAllWorktreeLogs` en la
@@ -64,6 +69,41 @@ function extractPort(line: string): number | null {
   return null;
 }
 
+// eslint-disable-next-line no-control-regex -- el propio carácter de escape (0x1B) es lo que se busca eliminar, no un control character accidental.
+const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;?]*[a-zA-Z]/g;
+
+// `turbo` (y orquestadores equivalentes) prefija cada línea de un monorepo
+// con `<paquete>:<tarea>: `, lo que permite etiquetar cada puerto detectado
+// con la app que lo anuncia — sin este prefijo (repo de una sola app), no hay
+// forma de saberlo y se deja sin etiqueta.
+const TURBO_LINE_PREFIX_PATTERN = /^([^\s:]+):([^\s:]+):\s*/;
+
+function extractAppLabel(line: string): string | null {
+  const stripped = line.replace(ANSI_ESCAPE_PATTERN, "");
+  const match = TURBO_LINE_PREFIX_PATTERN.exec(stripped);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, workspaceName, taskName] = match;
+
+  // Un timestamp tipo "10:30:00" encaja en la misma forma `algo:algo:`; se
+  // descarta cualquier captura sin ninguna letra, ya que ningún nombre de
+  // paquete real es puramente numérico.
+  if (!/[a-zA-Z]/.test(workspaceName) || !/[a-zA-Z]/.test(taskName)) {
+    return null;
+  }
+
+  return workspaceName.split("/").at(-1) ?? null;
+}
+
+function sortDetectedPorts(detectedPorts: Map<number, string | null>): DetectedPort[] {
+  return Array.from(detectedPorts, ([port, label]) => ({ port, label })).sort(
+    (a, b) => a.port - b.port,
+  );
+}
+
 interface TrackedProcess {
   // Sin proceso todavía en el breve hueco entre registrar el worktree como
   // "en marcha" y que `execa` devuelva el primer child (instalación o
@@ -72,14 +112,17 @@ interface TrackedProcess {
   linesSinceLastPrune: number;
   isStoppingIntentionally: boolean;
   exited: Promise<void>;
-  detectedPorts: Set<number>;
+  // Clave = puerto, valor = etiqueta de app (null si no se pudo determinar,
+  // ver `extractAppLabel`) — el primer nombre visto para un puerto se
+  // conserva, un mismo puerto no cambia de app durante la vida del proceso.
+  detectedPorts: Map<number, string | null>;
 }
 
 export interface ProcessManager {
   start(worktree: Worktree, project: Project): Promise<void>;
   stop(worktreeId: string): Promise<void>;
   stopAll(): Promise<void>;
-  getDetectedPorts(worktreeId: string): number[];
+  getDetectedPorts(worktreeId: string): DetectedPort[];
 }
 
 export function createProcessManager({
@@ -127,10 +170,10 @@ export function createProcessManager({
       const detectedPort = extractPort(content);
 
       if (detectedPort != null && !tracked.detectedPorts.has(detectedPort)) {
-        tracked.detectedPorts.add(detectedPort);
+        tracked.detectedPorts.set(detectedPort, extractAppLabel(content));
         io.to(worktreeRoom(worktreeId)).emit("detected-ports", {
           worktreeId,
-          ports: Array.from(tracked.detectedPorts).sort((a, b) => a - b),
+          ports: sortDetectedPorts(tracked.detectedPorts),
         });
       }
 
@@ -237,7 +280,7 @@ export function createProcessManager({
       linesSinceLastPrune: 0,
       isStoppingIntentionally: false,
       exited,
-      detectedPorts: new Set(),
+      detectedPorts: new Map(),
     };
 
     // El lock solo cubre este chequeo-y-registro atómico (evita que dos
@@ -356,10 +399,10 @@ export function createProcessManager({
     await Promise.all(Array.from(processes.values()).map((tracked) => killTracked(tracked)));
   }
 
-  function getDetectedPorts(worktreeId: string): number[] {
+  function getDetectedPorts(worktreeId: string): DetectedPort[] {
     const tracked = processes.get(worktreeId);
 
-    return tracked ? Array.from(tracked.detectedPorts).sort((a, b) => a - b) : [];
+    return tracked ? sortDetectedPorts(tracked.detectedPorts) : [];
   }
 
   return { start, stop, stopAll, getDetectedPorts };
