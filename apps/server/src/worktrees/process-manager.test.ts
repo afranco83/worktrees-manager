@@ -166,6 +166,25 @@ describe("process manager", () => {
 
     const logEvents = emitted.filter((entry) => entry.event === "log-entry");
     expect(logEvents.length).toBeGreaterThanOrEqual(2);
+    // El payload lleva `{worktreeId, entry}`, no el `LogEntry` a secas: un
+    // cliente puede estar unido a varias salas de worktree a la vez (ver
+    // `use-worktrees.ts`), así que sin `worktreeId` no habría forma de
+    // atribuir la línea al worktree correcto.
+    expect(
+      logEvents.every(
+        (entry) => (entry.payload as { worktreeId: string }).worktreeId === worktree.id,
+      ),
+    ).toBe(true);
+    expect(logEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            worktreeId: worktree.id,
+            entry: expect.objectContaining({ stream: "stdout", content: "hello from stdout" }),
+          }),
+        }),
+      ]),
+    );
   });
 
   it("should mark the worktree as stopped after an explicit stop, even though the process is killed by signal", async () => {
@@ -246,33 +265,33 @@ describe("process manager", () => {
     expect(entries.at(-1)?.content).toBe("line 2099");
   });
 
+  /**
+   * `detectInstallCommand` inyectado devuelve siempre un script `node`
+   * controlado (rápido y determinista) en vez de delegar en la detección real
+   * por lockfile — evita depender de `npm`/`pnpm` reales en el test.
+   */
+  function setUpManagerWithInstallScript(installScriptBody: string): {
+    manager: ProcessManager;
+    emitted: EmittedEvent[];
+  } {
+    const installDir = mkdtempSync(join(tmpdir(), "worktrees-manager-install-script-"));
+    tempDirs.push(installDir);
+    const installScriptPath = join(installDir, "install.js");
+    writeFileSync(installScriptPath, installScriptBody);
+
+    const fakeIo = buildFakeIo();
+
+    return {
+      manager: createProcessManager({
+        db,
+        io: fakeIo.io,
+        detectInstallCommand: () => `node ${installScriptPath}`,
+      }),
+      emitted: fakeIo.emitted,
+    };
+  }
+
   describe("dependency installation", () => {
-    /**
-     * `detectInstallCommand` inyectado devuelve siempre un script `node`
-     * controlado (rápido y determinista) en vez de delegar en la detección
-     * real por lockfile — evita depender de `npm`/`pnpm` reales en el test.
-     */
-    function setUpManagerWithInstallScript(installScriptBody: string): {
-      manager: ProcessManager;
-      emitted: EmittedEvent[];
-    } {
-      const installDir = mkdtempSync(join(tmpdir(), "worktrees-manager-install-script-"));
-      tempDirs.push(installDir);
-      const installScriptPath = join(installDir, "install.js");
-      writeFileSync(installScriptPath, installScriptBody);
-
-      const fakeIo = buildFakeIo();
-
-      return {
-        manager: createProcessManager({
-          db,
-          io: fakeIo.io,
-          detectInstallCommand: () => `node ${installScriptPath}`,
-        }),
-        emitted: fakeIo.emitted,
-      };
-    }
-
     it("should install dependencies before starting when node_modules is missing", async () => {
       const { manager: installingManager } = setUpManagerWithInstallScript(
         "require('fs').mkdirSync(process.cwd() + '/node_modules'); console.log('deps instaladas');",
@@ -373,6 +392,93 @@ describe("process manager", () => {
         processStatus: "stopped",
         pid: null,
       });
+    });
+  });
+
+  describe("detected ports", () => {
+    it("should return an empty array for a worktree with no process tracked", () => {
+      expect(manager.getDetectedPorts("00000000-0000-4000-8000-000000000000")).toEqual([]);
+    });
+
+    it("should detect ports announced via localhost URLs in the dev command's own output, matching a monorepo starting several apps", async () => {
+      const { worktree, project } = setUpWorktree(
+        `console.log('app-a ready - Local: http://localhost:3001');
+         console.log('app-b ready - Local: http://localhost:6006/');
+         setInterval(() => {}, 1000);`,
+      );
+
+      await manager.start(worktree, project);
+      await waitUntil(() => manager.getDetectedPorts(worktree.id).length >= 2);
+
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([3001, 6006]);
+
+      const portEvents = emitted.filter((entry) => entry.event === "detected-ports");
+      expect(portEvents.at(-1)?.payload).toMatchObject({ ports: [3001, 6006] });
+    });
+
+    it("should not detect the same port twice", async () => {
+      const { worktree, project } = setUpWorktree(
+        `console.log('Local: http://localhost:3001');
+         console.log('reprinted: http://localhost:3001');
+         setInterval(() => {}, 1000);`,
+      );
+
+      await manager.start(worktree, project);
+      await waitUntil(() => manager.getDetectedPorts(worktree.id).length >= 1);
+      // Da tiempo a que la segunda línea (idéntica) se procese también.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([3001]);
+      expect(emitted.filter((entry) => entry.event === "detected-ports")).toHaveLength(1);
+    });
+
+    it("should clear detected ports once the worktree is stopped", async () => {
+      const { worktree, project } = setUpWorktree(
+        "console.log('Local: http://localhost:3001'); setInterval(() => {}, 1000);",
+      );
+
+      await manager.start(worktree, project);
+      await waitUntil(() => manager.getDetectedPorts(worktree.id).length >= 1);
+
+      await manager.stop(worktree.id);
+
+      expect(manager.getDetectedPorts(worktree.id)).toEqual([]);
+    });
+  });
+
+  describe("process step feedback", () => {
+    it("should emit installing-dependencies then starting-dev-command then null while starting", async () => {
+      const { manager: installingManager, emitted: installEmitted } = setUpManagerWithInstallScript(
+        "console.log('instalando');",
+      );
+      const { worktree, project } = setUpWorktree("setInterval(() => {}, 1000);", {
+        withNodeModules: false,
+      });
+
+      await installingManager.start(worktree, project);
+
+      const stepEvents = installEmitted.filter((entry) => entry.event === "process-step");
+      expect(stepEvents.map((entry) => (entry.payload as { step: string | null }).step)).toEqual([
+        "installing-dependencies",
+        "starting-dev-command",
+        null,
+      ]);
+
+      await installingManager.stopAll();
+    });
+
+    it("should skip the installing-dependencies step when node_modules already exists", async () => {
+      const { worktree, project } = setUpWorktree("setInterval(() => {}, 1000);", {
+        withNodeModules: true,
+      });
+
+      await manager.start(worktree, project);
+
+      const stepEvents = emitted.filter((entry) => entry.event === "process-step");
+      expect(stepEvents.map((entry) => (entry.payload as { step: string | null }).step)).toEqual([
+        "starting-dev-command",
+        null,
+      ]);
     });
   });
 });

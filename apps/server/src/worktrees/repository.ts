@@ -28,6 +28,9 @@ function toWorktree(row: WorktreeRow): Worktree {
     pid: row.pid,
     prNumber: row.pr_number,
     createdAt: row.created_at,
+    // No persistido — placeholder aquí; `plugin.ts` lo sustituye por el valor
+    // real leído de `processManager.getDetectedPorts()` antes de responder.
+    detectedPorts: [],
   };
 }
 
@@ -92,6 +95,7 @@ export function insertWorktree(
     pid: null,
     prNumber: null,
     createdAt,
+    detectedPorts: [],
   };
 }
 

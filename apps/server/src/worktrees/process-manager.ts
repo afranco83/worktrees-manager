@@ -20,7 +20,7 @@ import {
 } from "./package-manager.js";
 import { withProjectLock } from "./project-lock.js";
 import { updateWorktreeProcessState } from "./repository.js";
-import type { Worktree, WorktreeProcessStatus } from "./schemas.js";
+import type { Worktree, WorktreeProcessStatus, WorktreeProcessStep } from "./schemas.js";
 
 // Poda cada N líneas nuevas en caliente (nunca por-línea) — ver también la
 // poda puntual en `'exit'` y el barrido de `pruneAllWorktreeLogs` en la
@@ -33,6 +33,37 @@ export function worktreeRoom(worktreeId: string): string {
   return `worktree:${worktreeId}`;
 }
 
+/**
+ * Un monorepo (turbo, npm/pnpm workspaces...) puede levantar varias apps en
+ * paralelo, cada una en su propio puerto — el único `worktree.port` asignado
+ * (pasado como variable de entorno `PORT`) solo coincide con uno de ellos, si
+ * acaso. Se detectan los puertos reales anunciados por las propias apps en su
+ * salida estándar (convención muy consistente en el ecosistema JS: Next.js,
+ * Vite, Storybook... imprimen su URL local al arrancar), en vez de intentar
+ * inspeccionar sockets del proceso a nivel de SO (mucho más frágil de hacer
+ * bien multiplataforma sin una librería dedicada).
+ */
+const PORT_PATTERNS = [
+  /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)[:/](\d{2,5})\b/i,
+  /\bport[:\s]+(\d{2,5})\b/i,
+];
+
+function extractPort(line: string): number | null {
+  for (const pattern of PORT_PATTERNS) {
+    const match = pattern.exec(line);
+
+    if (match?.[1]) {
+      const port = Number(match[1]);
+
+      if (port > 0 && port <= 65535) {
+        return port;
+      }
+    }
+  }
+
+  return null;
+}
+
 interface TrackedProcess {
   // Sin proceso todavía en el breve hueco entre registrar el worktree como
   // "en marcha" y que `execa` devuelva el primer child (instalación o
@@ -41,12 +72,14 @@ interface TrackedProcess {
   linesSinceLastPrune: number;
   isStoppingIntentionally: boolean;
   exited: Promise<void>;
+  detectedPorts: Set<number>;
 }
 
 export interface ProcessManager {
   start(worktree: Worktree, project: Project): Promise<void>;
   stop(worktreeId: string): Promise<void>;
   stopAll(): Promise<void>;
+  getDetectedPorts(worktreeId: string): number[];
 }
 
 export function createProcessManager({
@@ -70,9 +103,14 @@ export function createProcessManager({
     io.to(worktreeRoom(worktreeId)).emit("process-status", { worktreeId, processStatus, pid });
   }
 
+  /** Sub-paso dentro de "starting" — no persistido, solo señal en vivo para la UI. */
+  function setStep(worktreeId: string, step: WorktreeProcessStep | null): void {
+    io.to(worktreeRoom(worktreeId)).emit("process-step", { worktreeId, step });
+  }
+
   function logInfoLine(worktreeId: string, content: string): void {
     const entry = insertLogEntry(db, worktreeId, { stream: "stdout", content });
-    io.to(worktreeRoom(worktreeId)).emit("log-entry", entry);
+    io.to(worktreeRoom(worktreeId)).emit("log-entry", { worktreeId, entry });
   }
 
   function streamOutput(
@@ -86,8 +124,18 @@ export function createProcessManager({
     }
 
     createInterface({ input: readable }).on("line", (content) => {
+      const detectedPort = extractPort(content);
+
+      if (detectedPort != null && !tracked.detectedPorts.has(detectedPort)) {
+        tracked.detectedPorts.add(detectedPort);
+        io.to(worktreeRoom(worktreeId)).emit("detected-ports", {
+          worktreeId,
+          ports: Array.from(tracked.detectedPorts).sort((a, b) => a - b),
+        });
+      }
+
       const entry = insertLogEntry(db, worktreeId, { stream: streamName, content });
-      io.to(worktreeRoom(worktreeId)).emit("log-entry", entry);
+      io.to(worktreeRoom(worktreeId)).emit("log-entry", { worktreeId, entry });
 
       tracked.linesSinceLastPrune += 1;
       if (tracked.linesSinceLastPrune >= PRUNE_EVERY_N_LINES) {
@@ -150,6 +198,7 @@ export function createProcessManager({
     }
 
     const installCommand = detectInstallCommand(worktree.path);
+    setStep(worktree.id, "installing-dependencies");
     logInfoLine(worktree.id, `▶ Instalando dependencias (${installCommand})…`);
 
     const { child, outcome } = await spawnTracked(
@@ -188,6 +237,7 @@ export function createProcessManager({
       linesSinceLastPrune: 0,
       isStoppingIntentionally: false,
       exited,
+      detectedPorts: new Set(),
     };
 
     // El lock solo cubre este chequeo-y-registro atómico (evita que dos
@@ -219,6 +269,7 @@ export function createProcessManager({
     if (dependenciesOutcome === "stopped") {
       processes.delete(worktree.id);
       setStatus(worktree.id, "stopped", null);
+      setStep(worktree.id, null);
       resolveExited();
       return;
     }
@@ -226,12 +277,14 @@ export function createProcessManager({
     if (dependenciesOutcome === "failed") {
       processes.delete(worktree.id);
       setStatus(worktree.id, "error", null);
+      setStep(worktree.id, null);
       resolveExited();
       throw new DevCommandSpawnError(
         `No se han podido instalar las dependencias del worktree ${worktree.id}`,
       );
     }
 
+    setStep(worktree.id, "starting-dev-command");
     logInfoLine(worktree.id, `▶ Arrancando: ${project.devCommand}`);
 
     const { child, outcome } = await spawnTracked(
@@ -251,6 +304,7 @@ export function createProcessManager({
 
       pruneLogEntries(db, worktree.id);
       setStatus(worktree.id, finalStatus, null);
+      setStep(worktree.id, null);
       processes.delete(worktree.id);
       resolveExited();
     });
@@ -262,6 +316,7 @@ export function createProcessManager({
       // `outcome` de más abajo, sin pasar por aquí.
       if (processes.has(worktree.id)) {
         setStatus(worktree.id, "error", null);
+        setStep(worktree.id, null);
         processes.delete(worktree.id);
       }
 
@@ -271,12 +326,14 @@ export function createProcessManager({
     if (outcome === "spawn-failed") {
       processes.delete(worktree.id);
       setStatus(worktree.id, "error", null);
+      setStep(worktree.id, null);
       resolveExited();
       throw new DevCommandSpawnError(
         `No se ha podido arrancar el comando de dev del worktree ${worktree.id}`,
       );
     }
 
+    setStep(worktree.id, null);
     setStatus(worktree.id, "running", child.pid ?? null);
   }
 
@@ -299,5 +356,11 @@ export function createProcessManager({
     await Promise.all(Array.from(processes.values()).map((tracked) => killTracked(tracked)));
   }
 
-  return { start, stop, stopAll };
+  function getDetectedPorts(worktreeId: string): number[] {
+    const tracked = processes.get(worktreeId);
+
+    return tracked ? Array.from(tracked.detectedPorts).sort((a, b) => a - b) : [];
+  }
+
+  return { start, stop, stopAll, getDetectedPorts };
 }

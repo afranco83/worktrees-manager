@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { socket } from "@/lib/socket";
 
-import { logEntrySchema, type LogEntry } from "../schemas";
+import { logEntryEventSchema, type LogEntry } from "../schemas";
 import { fetchWorktreeLogs } from "./worktrees-api";
 
 /**
@@ -38,16 +38,22 @@ export function useWorktreeLogs(worktreeId: string, enabled: boolean) {
     }
 
     function handleLogEntry(event: unknown): void {
-      const result = logEntrySchema.safeParse(event);
+      const result = logEntryEventSchema.safeParse(event);
 
-      if (!result.success) {
+      // El cliente puede estar unido a varias salas de worktree a la vez (la
+      // lista de worktrees ya se une a todas para trackear su estado — ver
+      // `use-worktrees.ts`), así que hay que descartar cualquier línea que no
+      // pertenezca a este worktree en concreto.
+      if (!result.success || result.data.worktreeId !== worktreeId) {
         return;
       }
 
+      const entry = result.data.entry;
+
       if (hasResolvedHistoryRef.current) {
-        setEntries((current) => [...current, result.data]);
+        setEntries((current) => [...current, entry]);
       } else {
-        bufferRef.current.push(result.data);
+        bufferRef.current.push(entry);
       }
     }
 

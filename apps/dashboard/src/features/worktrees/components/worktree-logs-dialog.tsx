@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useWorktreeLogs } from "../api/use-worktree-logs";
+import { stripAnsiCodes } from "../lib/strip-ansi-codes";
 import type { Worktree } from "../schemas";
 
 export function WorktreeLogsDialog({
@@ -61,7 +62,7 @@ export function WorktreeLogsDialog({
                     entry.stream === "stderr" && "text-destructive",
                   )}
                 >
-                  {entry.content}
+                  {stripAnsiCodes(entry.content)}
                 </p>
               ))
             )}

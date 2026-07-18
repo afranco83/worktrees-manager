@@ -214,6 +214,7 @@ export const handlers = [
       pid: null,
       prNumber: null,
       createdAt: new Date().toISOString(),
+      detectedPorts: [],
     };
     nextWorktreePort += 1;
 

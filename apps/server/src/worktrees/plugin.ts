@@ -17,6 +17,7 @@ import {
 } from "./git-worktree.js";
 import { listRecentLogEntries } from "./log-repository.js";
 import { assignFreePort } from "./port-allocator.js";
+import type { ProcessManager } from "./process-manager.js";
 import { withProjectLock } from "./project-lock.js";
 import {
   deleteWorktree,
@@ -88,6 +89,18 @@ function requireWorktree(db: Parameters<typeof getWorktreeById>[0], id: string) 
   return worktree;
 }
 
+/**
+ * `detectedPorts` no se persiste en SQLite (ver `schemas.ts`): se calcula en
+ * caliente a partir del proceso trackeado en memoria, así que cada respuesta
+ * que devuelve uno o más worktrees lo sustituye por el valor real.
+ */
+function withDetectedPorts<T extends { id: string }>(
+  processManager: ProcessManager,
+  worktree: T,
+): T & { detectedPorts: number[] } {
+  return { ...worktree, detectedPorts: processManager.getDetectedPorts(worktree.id) };
+}
+
 export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/projects/:projectId/git-info",
@@ -137,7 +150,9 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const project = requireProject(fastify.db, request.params.projectId);
 
-      return listWorktreesByProject(fastify.db, project.id);
+      return listWorktreesByProject(fastify.db, project.id).map((worktree) =>
+        withDetectedPorts(fastify.processManager, worktree),
+      );
     },
   );
 
@@ -264,7 +279,7 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       await fastify.processManager.start(worktree, project);
 
-      return requireWorktree(fastify.db, worktree.id);
+      return withDetectedPorts(fastify.processManager, requireWorktree(fastify.db, worktree.id));
     },
   );
 
@@ -276,7 +291,7 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       await fastify.processManager.stop(worktree.id);
 
-      return requireWorktree(fastify.db, worktree.id);
+      return withDetectedPorts(fastify.processManager, requireWorktree(fastify.db, worktree.id));
     },
   );
 

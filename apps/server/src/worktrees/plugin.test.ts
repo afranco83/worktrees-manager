@@ -519,6 +519,42 @@ describe("worktrees plugin", () => {
       expect(worktrees.json()).toMatchObject([{ processStatus: "stopped", pid: null }]);
     });
 
+    it("should report detected ports from the dev command's own output while running", async () => {
+      const devCommand = writeDevScript(
+        "console.log('app-a - Local: http://localhost:3001'); setInterval(() => {}, 1000);",
+      );
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-detected-ports", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      const startResponse = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/start`,
+      });
+
+      expect(startResponse.statusCode).toBe(200);
+
+      await waitUntil(async () => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/projects/${project.id}/worktrees`,
+        });
+        const [reportedWorktree] = response.json();
+        return (reportedWorktree.detectedPorts ?? []).length > 0;
+      });
+
+      const worktrees = await app.inject({
+        method: "GET",
+        url: `/api/projects/${project.id}/worktrees`,
+      });
+      expect(worktrees.json()).toMatchObject([{ detectedPorts: [3001] }]);
+    });
+
     it("should return 409 when starting a worktree that is already running", async () => {
       const devCommand = writeDevScript("setInterval(() => {}, 1000);");
       const project = await createProject({ devCommand });

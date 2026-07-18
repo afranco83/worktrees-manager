@@ -104,7 +104,17 @@ describe("socket.io wiring", () => {
     }
 
     expect(receivedEvents.some((entry) => entry.event === "process-status")).toBe(true);
-    expect(receivedEvents.some((entry) => entry.event === "log-entry")).toBe(true);
+    const logEntryEvent = receivedEvents.find(
+      (entry): entry is { event: "log-entry"; payload: { worktreeId: string } } =>
+        entry.event === "log-entry" &&
+        typeof entry.payload === "object" &&
+        entry.payload !== null &&
+        "worktreeId" in entry.payload,
+    );
+    // El payload lleva `worktreeId`, no solo el `LogEntry` a secas: un cliente
+    // puede estar unido a varias salas de worktree a la vez (ver `use-worktrees.ts`),
+    // así que sin él no habría forma de atribuir la línea al worktree correcto.
+    expect(logEntryEvent?.payload.worktreeId).toBe(worktree.id);
   });
 
   it("should close cleanly without hanging, even with a connected client", async () => {

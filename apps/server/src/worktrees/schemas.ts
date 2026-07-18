@@ -13,6 +13,12 @@ export const worktreeSchema = z.object({
   pid: z.number().int().nullable(),
   prNumber: z.number().int().nullable(),
   createdAt: z.string(),
+  // No persistido en SQLite: se calcula en caliente a partir del proceso
+  // trackeado en memoria (ver `process-manager.ts`), detectando puertos
+  // reales anunciados en los logs — un monorepo con varias apps (turbo, npm
+  // workspaces...) puede levantar varios puertos distintos del único `port`
+  // asignado, que solo es el que se pasa como variable de entorno PORT.
+  detectedPorts: z.array(z.number().int()),
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;
@@ -72,6 +78,20 @@ export const logEntrySchema = z.object({
 
 export type LogEntry = z.infer<typeof logEntrySchema>;
 
+/**
+ * A diferencia de la respuesta REST (ya acotada a un worktree por la URL), el
+ * payload del evento de socket SÍ necesita el `worktreeId`: un cliente unido
+ * a varias salas a la vez (p. ej. la lista de worktrees, para reflejar su
+ * estado) no tendría forma de saber a cuál pertenece una línea si solo
+ * llevara el `LogEntry` a secas — hallazgo real, ver ADR-0007.
+ */
+export const logEntryEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  entry: logEntrySchema,
+});
+
+export type LogEntryEvent = z.infer<typeof logEntryEventSchema>;
+
 export const listLogEntriesQuerySchema = z.object({
   limit: z.coerce
     .number()
@@ -88,3 +108,23 @@ export const processStatusEventSchema = z.object({
 });
 
 export type ProcessStatusEvent = z.infer<typeof processStatusEventSchema>;
+
+// Sub-paso dentro de "starting", para dar más contexto que un genérico
+// "arrancando" mientras puede tardar (instalar dependencias reales puede
+// llevar bastante más que arrancar el propio `devCommand`).
+export const WORKTREE_PROCESS_STEPS = ["installing-dependencies", "starting-dev-command"] as const;
+export type WorktreeProcessStep = (typeof WORKTREE_PROCESS_STEPS)[number];
+
+export const processStepEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  step: z.enum(WORKTREE_PROCESS_STEPS).nullable(),
+});
+
+export type ProcessStepEvent = z.infer<typeof processStepEventSchema>;
+
+export const detectedPortsEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  ports: z.array(z.number().int()),
+});
+
+export type DetectedPortsEvent = z.infer<typeof detectedPortsEventSchema>;

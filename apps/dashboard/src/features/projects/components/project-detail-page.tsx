@@ -106,6 +106,8 @@ export function ProjectDetailPage() {
         {worktrees.data && (
           <WorktreesCardList
             worktrees={worktrees.data}
+            stepByWorktreeId={worktrees.stepByWorktreeId}
+            latestLogByWorktreeId={worktrees.latestLogByWorktreeId}
             onDelete={(worktree) => setDialogState({ type: "delete-worktree", worktree })}
           />
         )}
