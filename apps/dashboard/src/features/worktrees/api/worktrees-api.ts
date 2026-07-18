@@ -50,6 +50,23 @@ export async function stopWorktree(id: string): Promise<Worktree> {
   return worktreeSchema.parse(await apiRequest(`/api/worktrees/${id}/stop`, { method: "POST" }));
 }
 
+export async function updateWorktreeDevCommandOverride({
+  id,
+  devCommandOverride,
+}: {
+  id: string;
+  devCommandOverride: string;
+}): Promise<Worktree> {
+  return worktreeSchema.parse(
+    await apiRequest(`/api/worktrees/${id}`, {
+      method: "PATCH",
+      // Vacío = sin override (hereda el del proyecto); el backend distingue
+      // "sin override" con `null`, no con una string vacía.
+      body: JSON.stringify({ devCommandOverride: devCommandOverride.trim() || null }),
+    }),
+  );
+}
+
 export async function fetchWorktreeLogs(id: string): Promise<LogEntry[]> {
   return z.array(logEntrySchema).parse(await apiRequest(`/api/worktrees/${id}/logs`));
 }

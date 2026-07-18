@@ -24,6 +24,10 @@ export const worktreeSchema = z.object({
   pid: z.number().int().nullable(),
   prNumber: z.number().int().nullable(),
   createdAt: z.string(),
+  // `null` hereda el `devCommand` del proyecto — permite restringir qué
+  // arranca en ESTE worktree (p. ej. solo algunas apps de un monorepo) sin
+  // asumir ninguna herramienta de monorepo concreta, ver ADR-0009.
+  devCommandOverride: z.string().nullable(),
   // No persistido: calculado en caliente a partir de los logs del proceso
   // (ver ADR-0007/`process-manager.ts`) — un monorepo con varias apps puede
   // levantar varios puertos distintos del único `port` asignado.
@@ -31,6 +35,12 @@ export const worktreeSchema = z.object({
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;
+
+export const updateWorktreeFormSchema = z.object({
+  devCommandOverride: z.string(),
+});
+
+export type UpdateWorktreeFormValues = z.infer<typeof updateWorktreeFormSchema>;
 
 export const worktreeBaseSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("default") }),

@@ -18,6 +18,10 @@ const updateProjectRequestSchema = z
   })
   .partial();
 
+const updateWorktreeRequestSchema = z.object({
+  devCommandOverride: z.string().nullable(),
+});
+
 const updateSettingsRequestSchema = z
   .object({
     preferredTerminalCommand: z.string().nullable(),
@@ -214,6 +218,7 @@ export const handlers = [
       pid: null,
       prNumber: null,
       createdAt: new Date().toISOString(),
+      devCommandOverride: null,
       detectedPorts: [],
     };
     nextWorktreePort += 1;
@@ -221,6 +226,29 @@ export const handlers = [
     worktreesStore = { ...worktreesStore, [projectId]: [...existing, worktree] };
 
     return HttpResponse.json(worktree, { status: 201 });
+  }),
+
+  http.patch("/api/worktrees/:id", async ({ params, request }) => {
+    const id = requirePathParam(params.id);
+    const patch = updateWorktreeRequestSchema.parse(await request.json());
+    const entry = findWorktreeEntry(id);
+
+    if (!entry) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    const updated: Worktree = { ...entry.worktree, ...patch };
+    worktreesStore = {
+      ...worktreesStore,
+      [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>
+        worktree.id === id ? updated : worktree,
+      ),
+    };
+
+    return HttpResponse.json(updated);
   }),
 
   http.delete("/api/worktrees/:id", ({ params, request }) => {

@@ -14,3 +14,4 @@ A diferencia de otros repos propios sobre el mismo modelo documental, aquí no h
 | [0006](./0006-ajustes-globales-puertos-y-terminal.md)         | Ajustes globales: terminal preferida (lista curada, sin detección) + rango de puertos único, fix de lock de concurrencia                          |
 | [0007](./0007-arranque-parada-y-logs-de-entornos-dev.md)      | Arranque/parada de entornos de dev: registro de procesos por factoría, `tree-kill` sin `detached`, Socket.io por salas, retención acotada de logs |
 | [0008](./0008-deteccion-de-puertos-y-feedback-de-arranque.md) | Detección de puertos reales vía regex sobre logs (no escaneo de SO), evento `process-step`, fix de atribución de `log-entry` por sala             |
+| [0009](./0009-comando-de-arranque-por-worktree.md)            | Override de `devCommand` por worktree (texto libre) en vez de checkboxes + orquestación propia por app                                            |

@@ -127,6 +127,29 @@ describe("process manager", () => {
     ).toEqual(["starting", "running"]);
   });
 
+  it("should run the worktree's dev command override instead of the project's dev command when set", async () => {
+    const { worktree: baseWorktree, project } = setUpWorktree(
+      "console.log('project devCommand ran'); setInterval(() => {}, 1000);",
+    );
+    const overrideDir = mkdtempSync(join(tmpdir(), "worktrees-manager-process-manager-override-"));
+    tempDirs.push(overrideDir);
+    const overrideScriptPath = join(overrideDir, "override.js");
+    writeFileSync(overrideScriptPath, "console.log('override ran'); setInterval(() => {}, 1000);");
+    const worktree: Worktree = {
+      ...baseWorktree,
+      devCommandOverride: `node ${overrideScriptPath}`,
+    };
+
+    await manager.start(worktree, project);
+    await waitUntil(() =>
+      listRecentLogEntries(db, worktree.id, 20).some((entry) => entry.content === "override ran"),
+    );
+
+    const contents = listRecentLogEntries(db, worktree.id, 20).map((entry) => entry.content);
+    expect(contents).toContain("override ran");
+    expect(contents).not.toContain("project devCommand ran");
+  });
+
   it("should pass the assigned port as the PORT environment variable", async () => {
     const { worktree, project } = setUpWorktree("console.log(`port=${process.env.PORT}`);", {
       port: 4321,

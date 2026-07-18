@@ -79,4 +79,13 @@ export const migrations: Migration[] = [
       ALTER TABLE projects DROP COLUMN port_range_end;
     `,
   },
+  {
+    // Override opcional del `devCommand` del proyecto, por worktree (ver
+    // ADR-0009) — NULL (default) hereda el del proyecto sin ningún cambio de
+    // comportamiento para quien no lo use.
+    name: "0005_worktrees_dev_command_override",
+    up: `
+      ALTER TABLE worktrees ADD COLUMN dev_command_override TEXT;
+    `,
+  },
 ];

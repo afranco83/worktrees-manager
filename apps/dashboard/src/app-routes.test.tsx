@@ -298,6 +298,38 @@ describe("app routes", () => {
     expect(await screen.findByText("Parado")).toBeInTheDocument();
   });
 
+  it("should set and clear a worktree's dev command override", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    expect(screen.queryByText("Comando personalizado")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await user.type(
+      screen.getByLabelText("Comando de arranque"),
+      "pnpm dev -- --filter=api --filter=storefront",
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(await screen.findByText("Comando personalizado")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await user.clear(screen.getByLabelText("Comando de arranque"));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Comando personalizado")).not.toBeInTheDocument();
+    });
+  });
+
   it("should show the log history when opening the logs dialog for a worktree", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 

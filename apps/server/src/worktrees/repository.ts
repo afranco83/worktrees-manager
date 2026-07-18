@@ -15,6 +15,7 @@ interface WorktreeRow {
   pid: number | null;
   pr_number: number | null;
   created_at: string;
+  dev_command_override: string | null;
 }
 
 function toWorktree(row: WorktreeRow): Worktree {
@@ -28,6 +29,7 @@ function toWorktree(row: WorktreeRow): Worktree {
     pid: row.pid,
     prNumber: row.pr_number,
     createdAt: row.created_at,
+    devCommandOverride: row.dev_command_override,
     // No persistido — placeholder aquí; `plugin.ts` lo sustituye por el valor
     // real leído de `processManager.getDetectedPorts()` antes de responder.
     detectedPorts: [],
@@ -95,6 +97,7 @@ export function insertWorktree(
     pid: null,
     prNumber: null,
     createdAt,
+    devCommandOverride: null,
     detectedPorts: [],
   };
 }
@@ -105,6 +108,25 @@ export function deleteWorktree(db: Database.Database, id: string): void {
   if (result.changes === 0) {
     throw new NotFoundError(`No existe un worktree con id ${id}`);
   }
+}
+
+export function updateWorktreeDevCommandOverride(
+  db: Database.Database,
+  id: string,
+  devCommandOverride: string | null,
+): Worktree {
+  const existing = getWorktreeById(db, id);
+
+  if (!existing) {
+    throw new NotFoundError(`No existe un worktree con id ${id}`);
+  }
+
+  db.prepare("UPDATE worktrees SET dev_command_override = ? WHERE id = ?").run(
+    devCommandOverride,
+    id,
+  );
+
+  return { ...existing, devCommandOverride };
 }
 
 export function updateWorktreeProcessState(

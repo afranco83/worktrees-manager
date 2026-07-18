@@ -327,19 +327,18 @@ export function createProcessManager({
       );
     }
 
-    setStep(worktree.id, "starting-dev-command");
-    logInfoLine(worktree.id, `▶ Arrancando: ${project.devCommand}`);
+    // El override por worktree permite restringir qué arranca (p. ej. solo
+    // algunas apps de un monorepo) sin asumir ninguna herramienta concreta —
+    // el texto lo decide el usuario con las flags de la suya (ver ADR-0009).
+    const devCommand = worktree.devCommandOverride ?? project.devCommand;
 
-    const { child, outcome } = await spawnTracked(
-      worktree.id,
-      tracked,
-      project.devCommand,
-      worktree.path,
-      {
-        ...process.env,
-        PORT: String(worktree.port),
-      },
-    );
+    setStep(worktree.id, "starting-dev-command");
+    logInfoLine(worktree.id, `▶ Arrancando: ${devCommand}`);
+
+    const { child, outcome } = await spawnTracked(worktree.id, tracked, devCommand, worktree.path, {
+      ...process.env,
+      PORT: String(worktree.port),
+    });
 
     child.once("exit", (code) => {
       const finalStatus: WorktreeProcessStatus =

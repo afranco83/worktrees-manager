@@ -1,4 +1,4 @@
-import { Play, ScrollText, Square, Terminal, Trash2 } from "lucide-react";
+import { Play, ScrollText, SlidersHorizontal, Square, Terminal, Trash2 } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import type {
   WorktreeProcessStatus,
   WorktreeProcessStep,
 } from "../schemas";
+import { EditWorktreeDevCommandDialog } from "./edit-worktree-dev-command-dialog";
 import { WorktreeLogsDialog } from "./worktree-logs-dialog";
 
 const PROCESS_STATUS_LABELS: Record<WorktreeProcessStatus, string> = {
@@ -100,6 +101,7 @@ function WorktreeCard({
   const startWorktree = useStartWorktree();
   const stopWorktree = useStopWorktree();
   const [isLogsOpen, setIsLogsOpen] = useState(false);
+  const [isEditDevCommandOpen, setIsEditDevCommandOpen] = useState(false);
 
   const isTransitioning = worktree.processStatus === "starting";
 
@@ -126,6 +128,11 @@ function WorktreeCard({
           )}
           <IconButton icon={ScrollText} label="Ver logs" onClick={() => setIsLogsOpen(true)} />
           <IconButton
+            icon={SlidersHorizontal}
+            label="Editar comando de arranque"
+            onClick={() => setIsEditDevCommandOpen(true)}
+          />
+          <IconButton
             icon={Terminal}
             label="Abrir terminal"
             onClick={() => openTerminal.mutate(worktree.id)}
@@ -143,6 +150,9 @@ function WorktreeCard({
           <Badge variant={PROCESS_STATUS_BADGE_VARIANTS[worktree.processStatus]}>
             {PROCESS_STATUS_LABELS[worktree.processStatus]}
           </Badge>
+          {worktree.devCommandOverride != null && (
+            <Badge variant="outline">Comando personalizado</Badge>
+          )}
           <WorktreePorts worktree={worktree} />
         </div>
         {isTransitioning && step != null && (
@@ -171,6 +181,11 @@ function WorktreeCard({
       </CardContent>
 
       <WorktreeLogsDialog worktree={worktree} open={isLogsOpen} onOpenChange={setIsLogsOpen} />
+      <EditWorktreeDevCommandDialog
+        worktree={worktree}
+        open={isEditDevCommandOpen}
+        onOpenChange={setIsEditDevCommandOpen}
+      />
     </Card>
   );
 }

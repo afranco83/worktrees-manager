@@ -449,6 +449,65 @@ describe("worktrees plugin", () => {
     expect(existsSync(worktree.path)).toBe(false);
   });
 
+  it("should update the dev command override of a worktree and reflect it in a later GET", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-override", base: { type: "default" } },
+    });
+    const worktree = created.json();
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/worktrees/${worktree.id}`,
+      payload: { devCommandOverride: "pnpm dev --filter=api" },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json()).toMatchObject({ devCommandOverride: "pnpm dev --filter=api" });
+
+    const worktrees = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/worktrees`,
+    });
+    expect(worktrees.json()).toMatchObject([{ devCommandOverride: "pnpm dev --filter=api" }]);
+  });
+
+  it("should clear the dev command override of a worktree when patched with null", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-clear-override", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    await app.inject({
+      method: "PATCH",
+      url: `/api/worktrees/${worktree.id}`,
+      payload: { devCommandOverride: "pnpm dev --filter=api" },
+    });
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/worktrees/${worktree.id}`,
+      payload: { devCommandOverride: null },
+    });
+
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({ devCommandOverride: null });
+  });
+
+  it("should return 404 when patching the dev command override of a worktree id that does not exist", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/worktrees/00000000-0000-4000-8000-000000000000",
+      payload: { devCommandOverride: "pnpm dev" },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   it("should return 404 when opening a terminal for a worktree id that does not exist", async () => {
     const response = await app.inject({
       method: "POST",

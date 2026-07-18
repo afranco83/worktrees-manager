@@ -24,6 +24,11 @@ export const worktreeSchema = z.object({
   pid: z.number().int().nullable(),
   prNumber: z.number().int().nullable(),
   createdAt: z.string(),
+  // `null` hereda el `devCommand` del proyecto (comportamiento por defecto);
+  // permite restringir qué arranca en ESTE worktree sin asumir ninguna
+  // herramienta de monorepo concreta — el texto lo decide el usuario con las
+  // flags de la suya (turbo `--filter`, `pnpm --filter`...), ver ADR-0009.
+  devCommandOverride: z.string().nullable(),
   // No persistido en SQLite: se calcula en caliente a partir del proceso
   // trackeado en memoria (ver `process-manager.ts`), detectando puertos
   // reales anunciados en los logs — un monorepo con varias apps (turbo, npm
@@ -33,6 +38,12 @@ export const worktreeSchema = z.object({
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;
+
+export const updateWorktreeSchema = z.object({
+  devCommandOverride: z.string().min(1).nullable(),
+});
+
+export type UpdateWorktreeInput = z.infer<typeof updateWorktreeSchema>;
 
 const worktreeBaseSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("default") }),

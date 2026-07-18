@@ -25,6 +25,7 @@ import {
   insertWorktree,
   listUsedPorts,
   listWorktreesByProject,
+  updateWorktreeDevCommandOverride,
 } from "./repository.js";
 import {
   createWorktreeSchema,
@@ -33,6 +34,7 @@ import {
   logEntrySchema,
   projectGitInfoSchema,
   projectIdParamsSchema,
+  updateWorktreeSchema,
   worktreeIdParamsSchema,
   worktreeSchema,
   type DetectedPort,
@@ -224,6 +226,26 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
       reply.code(201);
 
       return worktree;
+    },
+  );
+
+  fastify.patch(
+    "/worktrees/:id",
+    {
+      schema: {
+        params: worktreeIdParamsSchema,
+        body: updateWorktreeSchema,
+        response: { 200: worktreeSchema },
+      },
+    },
+    async (request) => {
+      const updated = updateWorktreeDevCommandOverride(
+        fastify.db,
+        request.params.id,
+        request.body.devCommandOverride,
+      );
+
+      return withDetectedPorts(fastify.processManager, updated);
     },
   );
 
