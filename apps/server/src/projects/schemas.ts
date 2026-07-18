@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { projectConfigFileSchema } from "./config-file.js";
+
 export const projectSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -49,11 +51,7 @@ export const projectPathLookupSchema = z.object({
   hasCommits: z.boolean(),
   isWritable: z.boolean(),
   existingProjectId: z.string().uuid().nullable(),
-  configFile: z
-    .object({
-      devCommand: z.string(),
-    })
-    .nullable(),
+  configFile: projectConfigFileSchema.nullable(),
 });
 
 export type ProjectPathLookup = z.infer<typeof projectPathLookupSchema>;

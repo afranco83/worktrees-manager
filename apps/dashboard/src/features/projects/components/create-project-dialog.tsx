@@ -123,6 +123,7 @@ export function CreateProjectDialog({
 
     if (lookup.configFile) {
       setValue("devCommand", lookup.configFile.devCommand);
+      setValue("postCreateCommand", lookup.configFile.postCreateCommand ?? "");
     }
   }
 
@@ -169,7 +170,8 @@ export function CreateProjectDialog({
               <DialogTitle>Añadir proyecto</DialogTitle>
               <DialogDescription>
                 Indica la ruta local del repositorio. Si ya tiene un{" "}
-                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque.
+                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque y el
+                posterior a la creación.
               </DialogDescription>
             </DialogHeader>
 
@@ -256,7 +258,9 @@ export function CreateProjectDialog({
                   />
                   <p id="postCreateCommand-hint" className="text-sm text-muted-foreground">
                     Opcional. Se ejecuta una sola vez, automáticamente, justo tras crear cada
-                    worktree de este proyecto (p. ej. migrar o poblar una base de datos local).
+                    worktree de este proyecto (p. ej. migrar o poblar una base de datos local). Se
+                    guarda en <code>.worktrees-manager.json</code>: comitéalo para que el resto del
+                    equipo lo herede automáticamente.
                   </p>
                 </div>
               </fieldset>

@@ -103,6 +103,21 @@ describe("app routes", () => {
     expect(await screen.findByRole("heading", { name: "new-project" })).toBeInTheDocument();
   });
 
+  it("should autofill devCommand and postCreateCommand from an existing .worktrees-manager.json", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "Añadir proyecto" }));
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/has-config-file");
+    await user.tab();
+
+    await waitFor(() => expect(screen.getByLabelText("Comando de arranque")).toBeEnabled());
+    expect(screen.getByLabelText("Comando de arranque")).toHaveValue("pnpm dev");
+    expect(screen.getByLabelText("Comando posterior a la creación")).toHaveValue("pnpm db:migrate");
+  });
+
   it("should keep the rest of the form disabled until the local path is confirmed as a valid git repo", async () => {
     const user = userEvent.setup();
     renderApp();

@@ -182,7 +182,9 @@ export const handlers = [
       hasCommits: isGitRepo && !localPath.includes("no-commits"),
       isWritable: !localPath.includes("not-writable"),
       existingProjectId: existingProject?.id ?? null,
-      configFile: null,
+      configFile: localPath.includes("has-config-file")
+        ? { devCommand: "pnpm dev", postCreateCommand: "pnpm db:migrate" }
+        : null,
     });
   }),
 

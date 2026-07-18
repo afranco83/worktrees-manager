@@ -9,6 +9,10 @@ export const CONFIG_FILE_NAME = ".worktrees-manager.json";
 
 export const projectConfigFileSchema = z.object({
   devCommand: z.string().min(1),
+  // Ausente = no-op (ver ADR-0011). Se omite del fichero por completo en vez
+  // de escribir `null`, para que un proyecto sin comando posterior a la
+  // creación siga teniendo un `.worktrees-manager.json` mínimo y legible.
+  postCreateCommand: z.string().min(1).optional(),
 });
 
 export type ProjectConfigFile = z.infer<typeof projectConfigFileSchema>;

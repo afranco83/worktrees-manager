@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -55,5 +55,24 @@ describe("config-file", () => {
     writeProjectConfigFile(repoPath, { devCommand: "npm start" });
 
     expect(readProjectConfigFile(repoPath)).toEqual({ devCommand: "npm start" });
+  });
+
+  it("should round-trip postCreateCommand when present", () => {
+    writeProjectConfigFile(repoPath, {
+      devCommand: "pnpm dev",
+      postCreateCommand: "pnpm db:migrate",
+    });
+
+    expect(readProjectConfigFile(repoPath)).toEqual({
+      devCommand: "pnpm dev",
+      postCreateCommand: "pnpm db:migrate",
+    });
+  });
+
+  it("should omit postCreateCommand from the written file when not provided", () => {
+    writeProjectConfigFile(repoPath, { devCommand: "pnpm dev" });
+
+    const rawContent = readFileSync(join(repoPath, CONFIG_FILE_NAME), "utf-8");
+    expect(JSON.parse(rawContent)).not.toHaveProperty("postCreateCommand");
   });
 });

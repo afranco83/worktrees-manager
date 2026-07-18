@@ -117,7 +117,9 @@ export function EditProjectDialog({
             />
             <p id="edit-postCreateCommand-hint" className="text-sm text-muted-foreground">
               Opcional. Se ejecuta una sola vez, automáticamente, justo tras crear cada worktree de
-              este proyecto (p. ej. migrar o poblar una base de datos local).
+              este proyecto (p. ej. migrar o poblar una base de datos local). Se guarda en{" "}
+              <code>.worktrees-manager.json</code>: comitéalo para que el resto del equipo lo herede
+              automáticamente.
             </p>
           </div>
 

@@ -42,6 +42,7 @@ export const projectPathLookupSchema = z.object({
   configFile: z
     .object({
       devCommand: z.string(),
+      postCreateCommand: z.string().optional(),
     })
     .nullable(),
 });
