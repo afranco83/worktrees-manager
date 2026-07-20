@@ -19,6 +19,7 @@ No es una herramienta genérica para cualquier stack: se optimiza para el flujo 
 - Se pueden registrar N repositorios locales ("proyectos") en el dashboard, cada uno con:
   - Ruta local al repo principal.
   - Comando de arranque del entorno de desarrollo (ej. `npm run dev`, `pnpm dev`), parametrizable con el puerto asignado.
+  - Comando posterior a la creación, opcional: se ejecuta una sola vez, automáticamente, justo tras crear cada worktree del proyecto — para bootstrap que la instalación de dependencias o la copia de `.env` no cubren (p. ej. migrar/sembrar una base de datos local).
 - El rango de puertos para asignar a los worktrees es **único y global para toda la app** (no por proyecto), configurable en un apartado de ajustes globales — cada worktree nuevo toma cualquier puerto libre de ese rango, sin importar a qué proyecto pertenezca.
 - **Alta 100% desde la UI**: un botón "+ Añadir proyecto" abre un formulario para indicar la ruta local. Si el repo ya tiene un `.worktrees-manager.json` (ver más abajo), se autorellena el comando de arranque; si no existe, se rellena una vez y la propia app escribe el fichero en el repo. Ninguna acción del día a día (añadir proyecto, crear/borrar worktree, levantar/parar entorno) requiere recordar comandos: todo son CTAs del dashboard.
 
@@ -29,8 +30,10 @@ No es una herramienta genérica para cualquier stack: se optimiza para el flujo 
   - Una rama concreta existente.
   - La rama actual en la que esté situado el repo principal.
 - Al crear un worktree se le asigna automáticamente un **puerto libre** dentro del rango del proyecto, comprobando que no esté en uso por otro worktree registrado ni por ningún otro proceso del sistema.
+- Un worktree nuevo nace listo para usarse sin pasos manuales: hereda los ficheros `.env` reales del repo principal (gitignorados, así que `git worktree add` no los trae por sí solo) y, si el proyecto tiene un comando posterior a la creación configurado, se ejecuta automáticamente (instalando dependencias primero si hacen falta).
+- Cada worktree admite además un comando de arranque propio, opcional, que sustituye al del proyecto — útil en un monorepo para restringir qué apps arrancan en ese worktree en concreto.
 - **Borrar** un worktree (con confirmación si tiene cambios sin commitear o el proceso de dev sigue levantado).
-- Listado de todos los worktrees activos por proyecto, con su rama, ruta, puerto y estado.
+- Listado de todos los worktrees activos por proyecto, con su rama, ruta, puerto(s) y estado — en un monorepo con varias apps, se detectan y muestran los puertos reales de cada una (con su nombre, cuando se puede determinar), no solo el único puerto asignado.
 
 ### 2.3 Integración con Pull Requests
 
@@ -63,7 +66,7 @@ La app corre siempre en local (tu máquina), pero gestiona N proyectos a la vez 
 
 - **Distribución**: paquete npm, ejecutable con `npx worktrees-manager` (sin instalación permanente) o instalado globalmente (`npm i -g worktrees-manager`). Arranca el servidor local y sirve el dashboard en `localhost:PUERTO`.
 - **Registro central**: `~/.worktrees-manager/` (fuera de cualquier repo gestionado) guarda en SQLite qué rutas de proyecto están dadas de alta, sus worktrees, puertos asignados y logs. Detalle técnico en `ARCHITECTURE.md` §4.
-- **Config por proyecto versionada**: cada repo gestionado puede tener un `.worktrees-manager.json` en su raíz con el comando de arranque. Al añadir un proyecto desde la UI, si el fichero ya existe se lee y autorellena el formulario; si no existe, la app lo crea a partir de lo que rellenes. Ventaja: la config viaja con el repo (útil entre máquinas), en vez de vivir solo en la BD local del dashboard.
+- **Config por proyecto versionada**: cada repo gestionado puede tener un `.worktrees-manager.json` en su raíz con el comando de arranque y, si está configurado, el comando posterior a la creación. Al añadir un proyecto desde la UI, si el fichero ya existe se lee y autorellena el formulario; si no existe, la app lo crea a partir de lo que rellenes. Ventaja: la config viaja con el repo (útil entre máquinas, o entre compañeros de equipo que comiteen el fichero), en vez de vivir solo en la BD local del dashboard — con la salvedad de que el comando posterior a la creación dispara una acción real (no solo describe cómo arrancar algo), así que comitearlo es una decisión consciente de que esa acción es segura de repetir automáticamente para cualquiera.
 - **Ajustes globales de la app** (no versionados, viven solo en el registro central): rango de puertos único para todos los worktrees y comando de terminal preferido para "abrir terminal" — ver `ARCHITECTURE.md` §5.
 - **Arranque del propio dashboard**: única acción que sigue requiriendo un comando (`npx worktrees-manager`), ya que es un proceso de servidor que debe estar corriendo. Auto-arranque como servicio en segundo plano (launchd/systemd) queda como mejora futura, no como requisito de la v1.
 
