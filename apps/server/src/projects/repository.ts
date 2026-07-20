@@ -10,6 +10,7 @@ interface ProjectRow {
   name: string;
   local_path: string;
   dev_command: string;
+  post_create_command: string | null;
   repo_owner: string | null;
   repo_name: string | null;
   created_at: string;
@@ -21,6 +22,7 @@ function toProject(row: ProjectRow): Project {
     name: row.name,
     localPath: row.local_path,
     devCommand: row.dev_command,
+    postCreateCommand: row.post_create_command,
     repoOwner: row.repo_owner,
     repoName: row.repo_name,
     createdAt: row.created_at,
@@ -51,12 +53,13 @@ export function findProjectByLocalPath(db: Database.Database, localPath: string)
 export function insertProject(db: Database.Database, input: CreateProjectInput): Project {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
+  const postCreateCommand = input.postCreateCommand ?? null;
 
   try {
     db.prepare(
-      `INSERT INTO projects (id, name, local_path, dev_command, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(id, input.name, input.localPath, input.devCommand, createdAt);
+      `INSERT INTO projects (id, name, local_path, dev_command, post_create_command, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(id, input.name, input.localPath, input.devCommand, postCreateCommand, createdAt);
   } catch (error) {
     if (error instanceof Database.SqliteError && error.code === "SQLITE_CONSTRAINT_UNIQUE") {
       throw new DuplicateProjectPathError(
@@ -72,6 +75,7 @@ export function insertProject(db: Database.Database, input: CreateProjectInput):
     name: input.name,
     localPath: input.localPath,
     devCommand: input.devCommand,
+    postCreateCommand,
     repoOwner: null,
     repoName: null,
     createdAt,
@@ -92,13 +96,12 @@ export function updateProject(
     ...existing,
     ...(patch.name != null && { name: patch.name }),
     ...(patch.devCommand != null && { devCommand: patch.devCommand }),
+    ...(patch.postCreateCommand !== undefined && { postCreateCommand: patch.postCreateCommand }),
   };
 
-  db.prepare(`UPDATE projects SET name = ?, dev_command = ? WHERE id = ?`).run(
-    updated.name,
-    updated.devCommand,
-    id,
-  );
+  db.prepare(
+    `UPDATE projects SET name = ?, dev_command = ?, post_create_command = ? WHERE id = ?`,
+  ).run(updated.name, updated.devCommand, updated.postCreateCommand, id);
 
   return updated;
 }

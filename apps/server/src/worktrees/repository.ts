@@ -15,6 +15,7 @@ interface WorktreeRow {
   pid: number | null;
   pr_number: number | null;
   created_at: string;
+  dev_command_override: string | null;
 }
 
 function toWorktree(row: WorktreeRow): Worktree {
@@ -28,6 +29,10 @@ function toWorktree(row: WorktreeRow): Worktree {
     pid: row.pid,
     prNumber: row.pr_number,
     createdAt: row.created_at,
+    devCommandOverride: row.dev_command_override,
+    // No persistido — placeholder aquí; `plugin.ts` lo sustituye por el valor
+    // real leído de `processManager.getDetectedPorts()` antes de responder.
+    detectedPorts: [],
   };
 }
 
@@ -92,6 +97,8 @@ export function insertWorktree(
     pid: null,
     prNumber: null,
     createdAt,
+    devCommandOverride: null,
+    detectedPorts: [],
   };
 }
 
@@ -101,4 +108,48 @@ export function deleteWorktree(db: Database.Database, id: string): void {
   if (result.changes === 0) {
     throw new NotFoundError(`No existe un worktree con id ${id}`);
   }
+}
+
+export function updateWorktreeDevCommandOverride(
+  db: Database.Database,
+  id: string,
+  devCommandOverride: string | null,
+): Worktree {
+  const existing = getWorktreeById(db, id);
+
+  if (!existing) {
+    throw new NotFoundError(`No existe un worktree con id ${id}`);
+  }
+
+  db.prepare("UPDATE worktrees SET dev_command_override = ? WHERE id = ?").run(
+    devCommandOverride,
+    id,
+  );
+
+  return { ...existing, devCommandOverride };
+}
+
+export function updateWorktreeProcessState(
+  db: Database.Database,
+  id: string,
+  state: { processStatus: WorktreeProcessStatus; pid: number | null },
+): void {
+  db.prepare("UPDATE worktrees SET process_status = ?, pid = ? WHERE id = ?").run(
+    state.processStatus,
+    state.pid,
+    id,
+  );
+}
+
+/**
+ * Al arrancar el servidor no hay forma de recuperar un handle real de un
+ * proceso hijo de una ejecución anterior (viven solo en memoria, ver
+ * `process-manager.ts`) — se resetea cualquier fila que no esté ya "stopped"
+ * en vez de fingir que se sigue trackeando (mismo criterio que `project-lock.ts`
+ * para el resto de estado en memoria de la app).
+ */
+export function resetStaleProcessStates(db: Database.Database): void {
+  db.prepare(
+    `UPDATE worktrees SET process_status = 'stopped', pid = NULL WHERE process_status != 'stopped'`,
+  ).run();
 }

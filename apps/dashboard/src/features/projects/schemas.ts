@@ -5,6 +5,9 @@ export const projectSchema = z.object({
   name: z.string(),
   localPath: z.string(),
   devCommand: z.string(),
+  // `null` = no-op. Se ejecuta una sola vez, automáticamente, justo tras
+  // crear cada worktree del proyecto — ver ADR-0011.
+  postCreateCommand: z.string().nullable(),
   repoOwner: z.string().nullable(),
   repoName: z.string().nullable(),
   createdAt: z.string(),
@@ -16,6 +19,7 @@ export const createProjectFormSchema = z.object({
   localPath: z.string().min(1, "Indica la ruta local del repositorio"),
   name: z.string().min(1, "Indica un nombre"),
   devCommand: z.string().min(1, "Indica el comando de arranque"),
+  postCreateCommand: z.string(),
 });
 
 export type CreateProjectFormValues = z.output<typeof createProjectFormSchema>;
@@ -23,6 +27,7 @@ export type CreateProjectFormValues = z.output<typeof createProjectFormSchema>;
 export const updateProjectFormSchema = z.object({
   name: z.string().min(1, "Indica un nombre"),
   devCommand: z.string().min(1, "Indica el comando de arranque"),
+  postCreateCommand: z.string(),
 });
 
 export type UpdateProjectFormValues = z.output<typeof updateProjectFormSchema>;
@@ -37,6 +42,7 @@ export const projectPathLookupSchema = z.object({
   configFile: z
     .object({
       devCommand: z.string(),
+      postCreateCommand: z.string().optional(),
     })
     .nullable(),
 });

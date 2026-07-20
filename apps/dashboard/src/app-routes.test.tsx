@@ -23,6 +23,7 @@ function buildProject(overrides: Partial<Project> = {}): Project {
     name: faker.company.name(),
     localPath: `/repos/${faker.helpers.slugify(faker.company.name()).toLowerCase()}`,
     devCommand: "pnpm dev",
+    postCreateCommand: null,
     repoOwner: null,
     repoName: null,
     createdAt: faker.date.recent().toISOString(),
@@ -100,6 +101,21 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Añadir proyecto" }));
 
     expect(await screen.findByRole("heading", { name: "new-project" })).toBeInTheDocument();
+  });
+
+  it("should autofill devCommand and postCreateCommand from an existing .worktrees-manager.json", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay proyectos registrados.");
+    await user.click(screen.getByRole("button", { name: "Añadir proyecto" }));
+
+    await user.type(screen.getByLabelText("Ruta local"), "/repos/has-config-file");
+    await user.tab();
+
+    await waitFor(() => expect(screen.getByLabelText("Comando de arranque")).toBeEnabled());
+    expect(screen.getByLabelText("Comando de arranque")).toHaveValue("pnpm dev");
+    expect(screen.getByLabelText("Comando posterior a la creación")).toHaveValue("pnpm db:migrate");
   });
 
   it("should keep the rest of the form disabled until the local path is confirmed as a valid git repo", async () => {
@@ -219,6 +235,26 @@ describe("app routes", () => {
     expect(await screen.findByRole("heading", { name: "renamed-project" })).toBeInTheDocument();
   });
 
+  it("should set the project's post-create command when the edit form is submitted", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByRole("heading", { name: EXISTING_PROJECT.name });
+    await user.click(screen.getByRole("button", { name: "Editar proyecto" }));
+
+    await user.type(screen.getByLabelText("Comando posterior a la creación"), "pnpm db:migrate");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Comando posterior a la creación")).not.toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "Editar proyecto" }));
+
+    expect(screen.getByLabelText("Comando posterior a la creación")).toHaveValue("pnpm db:migrate");
+  });
+
   it("should navigate back to the empty state when the only project is deleted", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 
@@ -273,6 +309,81 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Abrir terminal" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("should start and stop a worktree's dev environment", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    expect(screen.getByText("Parado")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
+
+    expect(await screen.findByText("Corriendo")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Parar entorno" }));
+
+    expect(await screen.findByText("Parado")).toBeInTheDocument();
+  });
+
+  it("should set and clear a worktree's dev command override", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    expect(screen.queryByText("Comando personalizado")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await user.type(
+      screen.getByLabelText("Comando de arranque"),
+      "pnpm dev -- --filter=api --filter=storefront",
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(await screen.findByText("Comando personalizado")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await user.clear(screen.getByLabelText("Comando de arranque"));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Comando personalizado")).not.toBeInTheDocument();
+    });
+  });
+
+  it("should show the log history when opening the logs dialog for a worktree", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
+    await screen.findByText("Corriendo");
+
+    await user.click(screen.getByRole("button", { name: "Ver logs" }));
+
+    expect(await screen.findByText("Servidor de desarrollo arrancado")).toBeInTheDocument();
   });
 
   it("should delete a clean worktree when the deletion is confirmed", async () => {

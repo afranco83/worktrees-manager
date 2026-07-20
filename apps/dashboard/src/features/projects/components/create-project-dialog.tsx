@@ -88,7 +88,7 @@ export function CreateProjectDialog({
     formState: { errors, isSubmitting },
   } = useForm<CreateProjectFormValues>({
     resolver: standardSchemaResolver(createProjectFormSchema),
-    defaultValues: { localPath: "", name: "", devCommand: "" },
+    defaultValues: { localPath: "", name: "", devCommand: "", postCreateCommand: "" },
   });
 
   const watchedLocalPath = useWatch({ control, name: "localPath" });
@@ -123,6 +123,7 @@ export function CreateProjectDialog({
 
     if (lookup.configFile) {
       setValue("devCommand", lookup.configFile.devCommand);
+      setValue("postCreateCommand", lookup.configFile.postCreateCommand ?? "");
     }
   }
 
@@ -169,7 +170,8 @@ export function CreateProjectDialog({
               <DialogTitle>Añadir proyecto</DialogTitle>
               <DialogDescription>
                 Indica la ruta local del repositorio. Si ya tiene un{" "}
-                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque.
+                <code>.worktrees-manager.json</code>, se autorellenará el comando de arranque y el
+                posterior a la creación.
               </DialogDescription>
             </DialogHeader>
 
@@ -231,14 +233,35 @@ export function CreateProjectDialog({
                     id="devCommand"
                     placeholder="pnpm dev"
                     aria-invalid={errors.devCommand != null}
-                    aria-describedby={errors.devCommand ? "devCommand-error" : undefined}
+                    aria-describedby={errors.devCommand ? "devCommand-error" : "devCommand-hint"}
                     {...register("devCommand")}
                   />
-                  {errors.devCommand && (
+                  {errors.devCommand ? (
                     <p id="devCommand-error" className="text-sm text-destructive">
                       {errors.devCommand.message}
                     </p>
+                  ) : (
+                    <p id="devCommand-hint" className="text-sm text-muted-foreground">
+                      El comando debe leer el puerto asignado de la variable de entorno{" "}
+                      <code>PORT</code>.
+                    </p>
                   )}
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="postCreateCommand">Comando posterior a la creación</Label>
+                  <Input
+                    id="postCreateCommand"
+                    placeholder="Opcional, p. ej. pnpm db:migrate"
+                    aria-describedby="postCreateCommand-hint"
+                    {...register("postCreateCommand")}
+                  />
+                  <p id="postCreateCommand-hint" className="text-sm text-muted-foreground">
+                    Opcional. Se ejecuta una sola vez, automáticamente, justo tras crear cada
+                    worktree de este proyecto (p. ej. migrar o poblar una base de datos local). Se
+                    guarda en <code>.worktrees-manager.json</code>: comitéalo para que el resto del
+                    equipo lo herede automáticamente.
+                  </p>
                 </div>
               </fieldset>
 

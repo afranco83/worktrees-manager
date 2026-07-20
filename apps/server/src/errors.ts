@@ -25,3 +25,9 @@ export class NoFreePortAvailableError extends Error {}
 export class GitWorktreeOperationError extends Error {}
 
 export class TerminalLaunchError extends Error {}
+
+export class WorktreeProcessAlreadyRunningError extends Error {}
+
+export class WorktreeProcessNotRunningError extends Error {}
+
+export class DevCommandSpawnError extends Error {}

@@ -62,6 +62,32 @@ describe("projects repository", () => {
     expect(getProjectById(db, created.id)).toEqual(updated);
   });
 
+  it("should default postCreateCommand to null when not provided at creation", () => {
+    const created = insertProject(db, sampleProjectInput);
+
+    expect(created.postCreateCommand).toBeNull();
+  });
+
+  it("should persist postCreateCommand when provided at creation", () => {
+    const created = insertProject(db, { ...sampleProjectInput, postCreateCommand: "pnpm seed" });
+
+    expect(created.postCreateCommand).toBe("pnpm seed");
+    expect(getProjectById(db, created.id)).toMatchObject({ postCreateCommand: "pnpm seed" });
+  });
+
+  it("should set and clear postCreateCommand via update", () => {
+    const created = insertProject(db, sampleProjectInput);
+
+    const withCommand = updateProject(db, {
+      id: created.id,
+      patch: { postCreateCommand: "pnpm db:migrate" },
+    });
+    expect(withCommand.postCreateCommand).toBe("pnpm db:migrate");
+
+    const cleared = updateProject(db, { id: created.id, patch: { postCreateCommand: null } });
+    expect(cleared.postCreateCommand).toBeNull();
+  });
+
   it("should throw NotFoundError when updating a project id that does not exist", () => {
     expect(() =>
       updateProject(db, { id: "00000000-0000-4000-8000-000000000000", patch: { name: "x" } }),

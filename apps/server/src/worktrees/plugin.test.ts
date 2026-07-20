@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -44,20 +44,27 @@ describe("worktrees plugin", () => {
     repoPaths = [];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Algunos tests arrancan procesos de dev reales (setInterval de larga
+    // duración) — hay que pararlos explícitamente para no dejar procesos
+    // huérfanos entre tests, ya que `app.inject()` nunca llama a `app.close()`.
+    await app.processManager.stopAll();
+
     for (const repoPath of repoPaths) {
       rmSync(repoPath, { recursive: true, force: true });
     }
   });
 
-  async function createProject() {
+  async function createProject(
+    overrides: { devCommand?: string; postCreateCommand?: string } = {},
+  ) {
     const repoPath = createGitRepoDir();
     repoPaths.push(repoPath);
 
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: buildCreateProjectInput({ localPath: repoPath }),
+      payload: buildCreateProjectInput({ localPath: repoPath, ...overrides }),
     });
 
     return projectSchema.parse(response.json());
@@ -154,6 +161,87 @@ describe("worktrees plugin", () => {
     expect(
       execFileSync("git", ["status", "--porcelain"], { cwd: project.localPath }).toString(),
     ).not.toContain(".worktrees/feature-nested");
+  });
+
+  it("should copy the project's gitignored .env files into a newly created worktree", async () => {
+    const project = await createProject();
+    writeFileSync(join(project.localPath, ".gitignore"), ".env\n.env.*\n!.env.example\n");
+    execFileSync("git", ["add", ".gitignore"], { cwd: project.localPath, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "ignore env files"], {
+      cwd: project.localPath,
+      stdio: "ignore",
+    });
+    mkdirSync(join(project.localPath, "apps", "api"), { recursive: true });
+    writeFileSync(
+      join(project.localPath, "apps", "api", ".env"),
+      "DATABASE_URL=postgres://local\n",
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-env", base: { type: "default" } },
+    });
+
+    const worktree = response.json();
+    expect(readFileSync(join(worktree.path, "apps", "api", ".env"), "utf-8")).toBe(
+      "DATABASE_URL=postgres://local\n",
+    );
+  });
+
+  // `node_modules` versionado (con un fichero cualquiera dentro) para que
+  // `git worktree add` lo materialice también en el worktree nuevo — evita
+  // que el paso de instalación automática de `runPostCreateCommand` (ver
+  // ADR-0011) se dispare en estos tests, que solo cubren el propio comando.
+  function trackNodeModulesInRepo(repoPath: string): void {
+    mkdirSync(join(repoPath, "node_modules"), { recursive: true });
+    writeFileSync(join(repoPath, "node_modules", ".gitkeep"), "");
+    execFileSync("git", ["add", "node_modules"], { cwd: repoPath, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "track node_modules for tests"], {
+      cwd: repoPath,
+      stdio: "ignore",
+    });
+  }
+
+  it("should run the project's postCreateCommand once, right after creating a worktree", async () => {
+    const project = await createProject({ postCreateCommand: "echo 'entorno preparado'" });
+    trackNodeModulesInRepo(project.localPath);
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-post-create", base: { type: "default" } },
+    });
+    const worktree = created.json();
+
+    const logs = await app.inject({
+      method: "GET",
+      url: `/api/worktrees/${worktree.id}/logs`,
+    });
+
+    expect(logs.json().map((entry: { content: string }) => entry.content)).toEqual(
+      expect.arrayContaining(["entorno preparado", "✓ Comando posterior a la creación completado"]),
+    );
+  });
+
+  it("should still create the worktree when postCreateCommand fails, only logging the failure", async () => {
+    const project = await createProject({ postCreateCommand: "exit 1" });
+    trackNodeModulesInRepo(project.localPath);
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-post-create-fails", base: { type: "default" } },
+    });
+
+    expect(created.statusCode).toBe(201);
+    const worktree = created.json();
+    expect(existsSync(worktree.path)).toBe(true);
+
+    const logs = await app.inject({ method: "GET", url: `/api/worktrees/${worktree.id}/logs` });
+    expect(logs.json().map((entry: { content: string }) => entry.content)).toContain(
+      "✗ Comando posterior a la creación ha fallado (código 1)",
+    );
   });
 
   it("should assign non-colliding ports to two worktrees of the same project", async () => {
@@ -444,6 +532,65 @@ describe("worktrees plugin", () => {
     expect(existsSync(worktree.path)).toBe(false);
   });
 
+  it("should update the dev command override of a worktree and reflect it in a later GET", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-override", base: { type: "default" } },
+    });
+    const worktree = created.json();
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/worktrees/${worktree.id}`,
+      payload: { devCommandOverride: "pnpm dev --filter=api" },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json()).toMatchObject({ devCommandOverride: "pnpm dev --filter=api" });
+
+    const worktrees = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/worktrees`,
+    });
+    expect(worktrees.json()).toMatchObject([{ devCommandOverride: "pnpm dev --filter=api" }]);
+  });
+
+  it("should clear the dev command override of a worktree when patched with null", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-clear-override", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    await app.inject({
+      method: "PATCH",
+      url: `/api/worktrees/${worktree.id}`,
+      payload: { devCommandOverride: "pnpm dev --filter=api" },
+    });
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/worktrees/${worktree.id}`,
+      payload: { devCommandOverride: null },
+    });
+
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({ devCommandOverride: null });
+  });
+
+  it("should return 404 when patching the dev command override of a worktree id that does not exist", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/worktrees/00000000-0000-4000-8000-000000000000",
+      payload: { devCommandOverride: "pnpm dev" },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   it("should return 404 when opening a terminal for a worktree id that does not exist", async () => {
     const response = await app.inject({
       method: "POST",
@@ -451,5 +598,194 @@ describe("worktrees plugin", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  async function waitUntil(
+    condition: () => boolean | Promise<boolean>,
+    { timeoutMs = 3000, intervalMs = 20 }: { timeoutMs?: number; intervalMs?: number } = {},
+  ): Promise<void> {
+    const start = Date.now();
+
+    while (!(await condition())) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error("Timed out waiting for condition");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
+  function writeDevScript(scriptBody: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "worktrees-manager-worktrees-plugin-scripts-"));
+    repoPaths.push(dir);
+    const scriptPath = join(dir, "dev.js");
+    writeFileSync(scriptPath, scriptBody);
+
+    return `node ${scriptPath}`;
+  }
+
+  describe("start/stop/logs", () => {
+    it("should start the dev command, mark the worktree as running, and stop it back to stopped", async () => {
+      const devCommand = writeDevScript(
+        "console.log(`listening on ${process.env.PORT}`); setInterval(() => {}, 1000);",
+      );
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-start", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      const startResponse = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/start`,
+      });
+
+      expect(startResponse.statusCode).toBe(200);
+      expect(startResponse.json()).toMatchObject({ processStatus: "running" });
+
+      const stopResponse = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/stop`,
+      });
+
+      expect(stopResponse.statusCode).toBe(200);
+      expect(stopResponse.json()).toMatchObject({ processStatus: "stopped", pid: null });
+
+      const worktrees = await app.inject({
+        method: "GET",
+        url: `/api/projects/${project.id}/worktrees`,
+      });
+      expect(worktrees.json()).toMatchObject([{ processStatus: "stopped", pid: null }]);
+    });
+
+    it("should report detected ports from the dev command's own output while running", async () => {
+      const devCommand = writeDevScript(
+        "console.log('app-a - Local: http://localhost:3001'); setInterval(() => {}, 1000);",
+      );
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-detected-ports", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      const startResponse = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/start`,
+      });
+
+      expect(startResponse.statusCode).toBe(200);
+
+      await waitUntil(async () => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/projects/${project.id}/worktrees`,
+        });
+        const [reportedWorktree] = response.json();
+        return (reportedWorktree.detectedPorts ?? []).length > 0;
+      });
+
+      const worktrees = await app.inject({
+        method: "GET",
+        url: `/api/projects/${project.id}/worktrees`,
+      });
+      expect(worktrees.json()).toMatchObject([{ detectedPorts: [{ port: 3001, label: null }] }]);
+    });
+
+    it("should return 409 when starting a worktree that is already running", async () => {
+      const devCommand = writeDevScript("setInterval(() => {}, 1000);");
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-already-running", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      await app.inject({ method: "POST", url: `/api/worktrees/${worktree.id}/start` });
+      const secondStart = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/start`,
+      });
+
+      expect(secondStart.statusCode).toBe(409);
+    });
+
+    it("should return 409 when stopping a worktree that is not running", async () => {
+      const project = await createProject();
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-not-running", base: { type: "default" } },
+      });
+      const worktree = created.json();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/worktrees/${worktree.id}/stop`,
+      });
+
+      expect(response.statusCode).toBe(409);
+    });
+
+    it("should return the log history in chronological order once the process has produced output", async () => {
+      const devCommand = writeDevScript(
+        "console.log('first line'); console.log('second line'); setInterval(() => {}, 1000);",
+      );
+      const project = await createProject({ devCommand });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: "feature-logs", base: { type: "default" } },
+      });
+      const worktree = created.json();
+      mkdirSync(join(worktree.path, "node_modules"));
+
+      await app.inject({ method: "POST", url: `/api/worktrees/${worktree.id}/start` });
+
+      // No basta con "hay al menos 2 líneas": la línea informativa "▶
+      // Arrancando…" se inserta antes del devCommand real, así que un umbral
+      // por longitud puede quedar satisfecho antes de que llegue "second line".
+      await waitUntil(async () => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/worktrees/${worktree.id}/logs`,
+        });
+        return response
+          .json()
+          .some((entry: { content: string }) => entry.content === "second line");
+      });
+
+      const logsResponse = await app.inject({
+        method: "GET",
+        url: `/api/worktrees/${worktree.id}/logs`,
+      });
+
+      expect(logsResponse.statusCode).toBe(200);
+      // Los últimos dos son las líneas del devCommand real; antes de ellas
+      // hay una línea informativa "▶ Arrancando…" que la propia app inserta.
+      expect(logsResponse.json().slice(-2)).toMatchObject([
+        { stream: "stdout", content: "first line" },
+        { stream: "stdout", content: "second line" },
+      ]);
+    });
+
+    it("should return 404 when starting/stopping/listing logs for a worktree id that does not exist", async () => {
+      const missingId = "00000000-0000-4000-8000-000000000000";
+
+      const responses = await Promise.all([
+        app.inject({ method: "POST", url: `/api/worktrees/${missingId}/start` }),
+        app.inject({ method: "POST", url: `/api/worktrees/${missingId}/stop` }),
+        app.inject({ method: "GET", url: `/api/worktrees/${missingId}/logs` }),
+      ]);
+
+      expect(responses.every((response) => response.statusCode === 404)).toBe(true);
+    });
   });
 });

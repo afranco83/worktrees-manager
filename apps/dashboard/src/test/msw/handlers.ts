@@ -3,20 +3,26 @@ import { z } from "zod";
 
 import type { Project } from "@/features/projects/schemas";
 import type { AppSettings, TerminalOption } from "@/features/settings/schemas";
-import type { ProjectGitInfo, Worktree } from "@/features/worktrees/schemas";
+import type { LogEntry, ProjectGitInfo, Worktree } from "@/features/worktrees/schemas";
 
 const createProjectRequestSchema = z.object({
   localPath: z.string(),
   name: z.string(),
   devCommand: z.string(),
+  postCreateCommand: z.string().nullable(),
 });
 
 const updateProjectRequestSchema = z
   .object({
     name: z.string(),
     devCommand: z.string(),
+    postCreateCommand: z.string().nullable(),
   })
   .partial();
+
+const updateWorktreeRequestSchema = z.object({
+  devCommandOverride: z.string().nullable(),
+});
 
 const updateSettingsRequestSchema = z
   .object({
@@ -72,16 +78,30 @@ const DEFAULT_GIT_INFO: ProjectGitInfo = {
 
 export let worktreesStore: Record<string, Worktree[]> = {};
 export let gitInfoStore: Record<string, ProjectGitInfo> = {};
+export let logEntriesStore: Record<string, LogEntry[]> = {};
 let nextWorktreePort = 4100;
 
 export function resetWorktreesStore(): void {
   worktreesStore = {};
   gitInfoStore = {};
+  logEntriesStore = {};
   nextWorktreePort = 4100;
 }
 
 export function setProjectGitInfo(projectId: string, gitInfo: ProjectGitInfo): void {
   gitInfoStore = { ...gitInfoStore, [projectId]: gitInfo };
+}
+
+function findWorktreeEntry(id: string): { projectId: string; worktree: Worktree } | undefined {
+  for (const [projectId, worktrees] of Object.entries(worktreesStore)) {
+    const worktree = worktrees.find((candidate) => candidate.id === id);
+
+    if (worktree) {
+      return { projectId, worktree };
+    }
+  }
+
+  return undefined;
 }
 
 export const FAKE_HOME = "/home/test";
@@ -162,7 +182,9 @@ export const handlers = [
       hasCommits: isGitRepo && !localPath.includes("no-commits"),
       isWritable: !localPath.includes("not-writable"),
       existingProjectId: existingProject?.id ?? null,
-      configFile: null,
+      configFile: localPath.includes("has-config-file")
+        ? { devCommand: "pnpm dev", postCreateCommand: "pnpm db:migrate" }
+        : null,
     });
   }),
 
@@ -200,12 +222,37 @@ export const handlers = [
       pid: null,
       prNumber: null,
       createdAt: new Date().toISOString(),
+      devCommandOverride: null,
+      detectedPorts: [],
     };
     nextWorktreePort += 1;
 
     worktreesStore = { ...worktreesStore, [projectId]: [...existing, worktree] };
 
     return HttpResponse.json(worktree, { status: 201 });
+  }),
+
+  http.patch("/api/worktrees/:id", async ({ params, request }) => {
+    const id = requirePathParam(params.id);
+    const patch = updateWorktreeRequestSchema.parse(await request.json());
+    const entry = findWorktreeEntry(id);
+
+    if (!entry) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    const updated: Worktree = { ...entry.worktree, ...patch };
+    worktreesStore = {
+      ...worktreesStore,
+      [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>
+        worktree.id === id ? updated : worktree,
+      ),
+    };
+
+    return HttpResponse.json(updated);
   }),
 
   http.delete("/api/worktrees/:id", ({ params, request }) => {
@@ -258,6 +305,67 @@ export const handlers = [
     }
 
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post("/api/worktrees/:id/start", ({ params }) => {
+    const id = requirePathParam(params.id);
+    const entry = findWorktreeEntry(id);
+
+    if (!entry) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    const updated: Worktree = { ...entry.worktree, processStatus: "running", pid: 12345 };
+    worktreesStore = {
+      ...worktreesStore,
+      [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>
+        worktree.id === id ? updated : worktree,
+      ),
+    };
+    logEntriesStore = {
+      ...logEntriesStore,
+      [id]: [
+        {
+          id: 1,
+          timestamp: new Date().toISOString(),
+          stream: "stdout",
+          content: "Servidor de desarrollo arrancado",
+        },
+      ],
+    };
+
+    return HttpResponse.json(updated);
+  }),
+
+  http.post("/api/worktrees/:id/stop", ({ params }) => {
+    const id = requirePathParam(params.id);
+    const entry = findWorktreeEntry(id);
+
+    if (!entry) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    const updated: Worktree = { ...entry.worktree, processStatus: "stopped", pid: null };
+    worktreesStore = {
+      ...worktreesStore,
+      [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>
+        worktree.id === id ? updated : worktree,
+      ),
+    };
+
+    return HttpResponse.json(updated);
+  }),
+
+  http.get("/api/worktrees/:id/logs", ({ params }) => {
+    const id = requirePathParam(params.id);
+
+    return HttpResponse.json(logEntriesStore[id] ?? []);
   }),
 
   http.get("/api/settings", () => HttpResponse.json(settingsStore)),

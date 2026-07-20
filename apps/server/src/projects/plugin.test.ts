@@ -211,6 +211,78 @@ describe("projects plugin", () => {
     expect(readProjectConfigFile(repoPath)).toMatchObject({ devCommand: "npm start" });
   });
 
+  it("should create a project with a postCreateCommand, default it to null when omitted, and write both to the config file", async () => {
+    const repoPathWithCommand = trackRepoPath();
+    const withCommand = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({
+        localPath: repoPathWithCommand,
+        postCreateCommand: "pnpm db:migrate",
+      }),
+    });
+    expect(withCommand.json()).toMatchObject({ postCreateCommand: "pnpm db:migrate" });
+    expect(readProjectConfigFile(repoPathWithCommand)).toMatchObject({
+      postCreateCommand: "pnpm db:migrate",
+    });
+
+    const repoPathWithoutCommand = trackRepoPath();
+    const withoutCommand = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({ localPath: repoPathWithoutCommand }),
+    });
+    expect(withoutCommand.json()).toMatchObject({ postCreateCommand: null });
+    // Ausente del fichero, no `null` — así un proyecto sin comando posterior
+    // a la creación sigue teniendo un `.worktrees-manager.json` mínimo.
+    expect(readProjectConfigFile(repoPathWithoutCommand)).not.toHaveProperty("postCreateCommand");
+  });
+
+  it("should set and clear a project's postCreateCommand via PATCH, keeping the config file in sync", async () => {
+    const repoPath = trackRepoPath();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: buildCreateProjectInput({ localPath: repoPath }),
+    });
+    const project = created.json();
+
+    const withCommand = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { postCreateCommand: "pnpm db:migrate" },
+    });
+    expect(withCommand.json()).toMatchObject({ postCreateCommand: "pnpm db:migrate" });
+    expect(readProjectConfigFile(repoPath)).toMatchObject({
+      postCreateCommand: "pnpm db:migrate",
+    });
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { postCreateCommand: null },
+    });
+    expect(cleared.json()).toMatchObject({ postCreateCommand: null });
+    expect(readProjectConfigFile(repoPath)).not.toHaveProperty("postCreateCommand");
+  });
+
+  it("should include postCreateCommand when looking up a path with an existing config file", async () => {
+    const repoPath = trackRepoPath();
+    writeFileSync(
+      join(repoPath, ".worktrees-manager.json"),
+      JSON.stringify({ devCommand: "pnpm dev", postCreateCommand: "pnpm db:migrate" }),
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/lookup?localPath=${repoPath}`,
+    });
+
+    expect(response.json()).toMatchObject({
+      configFile: { devCommand: "pnpm dev", postCreateCommand: "pnpm db:migrate" },
+    });
+  });
+
   it("should return 404 when updating a project id that does not exist", async () => {
     const response = await app.inject({
       method: "PATCH",

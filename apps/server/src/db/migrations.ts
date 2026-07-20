@@ -79,4 +79,23 @@ export const migrations: Migration[] = [
       ALTER TABLE projects DROP COLUMN port_range_end;
     `,
   },
+  {
+    // Override opcional del `devCommand` del proyecto, por worktree (ver
+    // ADR-0009) — NULL (default) hereda el del proyecto sin ningún cambio de
+    // comportamiento para quien no lo use.
+    name: "0005_worktrees_dev_command_override",
+    up: `
+      ALTER TABLE worktrees ADD COLUMN dev_command_override TEXT;
+    `,
+  },
+  {
+    // Comando opcional ejecutado una vez, automáticamente, justo tras crear
+    // cada worktree del proyecto (tras copiar sus `.env`) — para bootstrap
+    // que `pnpm install`/`.env` no cubren (migrar/seedear una base de datos
+    // local, generar un cliente...). NULL (default) = no-op, ver ADR-0011.
+    name: "0006_projects_post_create_command",
+    up: `
+      ALTER TABLE projects ADD COLUMN post_create_command TEXT;
+    `,
+  },
 ];

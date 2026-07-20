@@ -11,6 +11,9 @@ import {
   insertWorktree,
   listUsedPorts,
   listWorktreesByProject,
+  resetStaleProcessStates,
+  updateWorktreeDevCommandOverride,
+  updateWorktreeProcessState,
 } from "./repository.js";
 
 describe("worktrees repository", () => {
@@ -95,5 +98,69 @@ describe("worktrees repository", () => {
 
   it("should throw NotFoundError when deleting a worktree id that does not exist", () => {
     expect(() => deleteWorktree(db, "00000000-0000-4000-8000-000000000000")).toThrow(NotFoundError);
+  });
+
+  it("should update the process status and pid of a worktree", () => {
+    const created = insertWorktree(db, {
+      projectId,
+      branch: "feature-a",
+      path: "/repos/foo.worktrees/feature-a",
+      port: 4100,
+    });
+
+    updateWorktreeProcessState(db, created.id, { processStatus: "running", pid: 12345 });
+
+    expect(getWorktreeById(db, created.id)).toMatchObject({ processStatus: "running", pid: 12345 });
+  });
+
+  it("should update and clear the dev command override of a worktree", () => {
+    const created = insertWorktree(db, {
+      projectId,
+      branch: "feature-a",
+      path: "/repos/foo.worktrees/feature-a",
+      port: 4100,
+    });
+    expect(created.devCommandOverride).toBeNull();
+
+    const withOverride = updateWorktreeDevCommandOverride(db, created.id, "pnpm dev --filter=api");
+
+    expect(withOverride.devCommandOverride).toBe("pnpm dev --filter=api");
+    expect(getWorktreeById(db, created.id)).toMatchObject({
+      devCommandOverride: "pnpm dev --filter=api",
+    });
+
+    const cleared = updateWorktreeDevCommandOverride(db, created.id, null);
+
+    expect(cleared.devCommandOverride).toBeNull();
+  });
+
+  it("should throw NotFoundError when updating the dev command override of a worktree that does not exist", () => {
+    expect(() =>
+      updateWorktreeDevCommandOverride(db, "00000000-0000-4000-8000-000000000000", "pnpm dev"),
+    ).toThrow(NotFoundError);
+  });
+
+  it("should reset any non-stopped worktree to stopped/null pid", () => {
+    const running = insertWorktree(db, {
+      projectId,
+      branch: "feature-a",
+      path: "/repos/foo.worktrees/feature-a",
+      port: 4100,
+    });
+    const alreadyStopped = insertWorktree(db, {
+      projectId,
+      branch: "feature-b",
+      path: "/repos/foo.worktrees/feature-b",
+      port: 4101,
+    });
+    updateWorktreeProcessState(db, running.id, { processStatus: "running", pid: 12345 });
+
+    resetStaleProcessStates(db);
+
+    expect(getWorktreeById(db, running.id)).toMatchObject({ processStatus: "stopped", pid: null });
+    expect(getWorktreeById(db, alreadyStopped.id)).toMatchObject({
+      processStatus: "stopped",
+      pid: null,
+    });
   });
 });

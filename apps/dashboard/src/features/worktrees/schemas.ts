@@ -1,6 +1,18 @@
 import { z } from "zod";
 
 export const WORKTREE_PROCESS_STATUSES = ["stopped", "starting", "running", "error"] as const;
+export type WorktreeProcessStatus = (typeof WORKTREE_PROCESS_STATUSES)[number];
+
+// Un monorepo (turbo, npm/pnpm workspaces...) puede levantar varias apps a la
+// vez, cada una con su propio puerto — `label` es el nombre de la app cuando
+// se puede extraer del prefijo de log de un orquestador (turbo: `paquete:tarea:
+// `), `null` si no (repo de una sola app, o formato de log no reconocido).
+export const detectedPortSchema = z.object({
+  port: z.number().int(),
+  label: z.string().nullable(),
+});
+
+export type DetectedPort = z.infer<typeof detectedPortSchema>;
 
 export const worktreeSchema = z.object({
   id: z.string().uuid(),
@@ -12,9 +24,23 @@ export const worktreeSchema = z.object({
   pid: z.number().int().nullable(),
   prNumber: z.number().int().nullable(),
   createdAt: z.string(),
+  // `null` hereda el `devCommand` del proyecto — permite restringir qué
+  // arranca en ESTE worktree (p. ej. solo algunas apps de un monorepo) sin
+  // asumir ninguna herramienta de monorepo concreta, ver ADR-0009.
+  devCommandOverride: z.string().nullable(),
+  // No persistido: calculado en caliente a partir de los logs del proceso
+  // (ver ADR-0007/`process-manager.ts`) — un monorepo con varias apps puede
+  // levantar varios puertos distintos del único `port` asignado.
+  detectedPorts: z.array(detectedPortSchema),
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;
+
+export const updateWorktreeFormSchema = z.object({
+  devCommandOverride: z.string(),
+});
+
+export type UpdateWorktreeFormValues = z.infer<typeof updateWorktreeFormSchema>;
 
 export const worktreeBaseSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("default") }),
@@ -38,3 +64,54 @@ export const projectGitInfoSchema = z.object({
 });
 
 export type ProjectGitInfo = z.infer<typeof projectGitInfoSchema>;
+
+// Mismo schema para la respuesta REST del histórico y el payload del evento
+// de socket `log-entry` — el `id` actúa de cursor para unir histórico y
+// tiempo real sin perder ni duplicar líneas (ver `use-worktree-logs.ts`).
+export const logEntrySchema = z.object({
+  id: z.number().int(),
+  timestamp: z.string(),
+  stream: z.enum(["stdout", "stderr"]),
+  content: z.string(),
+});
+
+export type LogEntry = z.infer<typeof logEntrySchema>;
+
+/**
+ * A diferencia de la respuesta REST (ya acotada a un worktree por la URL), el
+ * payload del evento de socket SÍ necesita el `worktreeId`: un cliente unido
+ * a varias salas a la vez (p. ej. la lista de worktrees, para reflejar su
+ * estado) no tendría forma de saber a cuál pertenece una línea si solo
+ * llevara el `LogEntry` a secas — hallazgo real, ver ADR-0007.
+ */
+export const logEntryEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  entry: logEntrySchema,
+});
+
+export type LogEntryEvent = z.infer<typeof logEntryEventSchema>;
+
+export const processStatusEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  processStatus: z.enum(WORKTREE_PROCESS_STATUSES),
+  pid: z.number().int().nullable(),
+});
+
+export type ProcessStatusEvent = z.infer<typeof processStatusEventSchema>;
+
+export const WORKTREE_PROCESS_STEPS = ["installing-dependencies", "starting-dev-command"] as const;
+export type WorktreeProcessStep = (typeof WORKTREE_PROCESS_STEPS)[number];
+
+export const processStepEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  step: z.enum(WORKTREE_PROCESS_STEPS).nullable(),
+});
+
+export type ProcessStepEvent = z.infer<typeof processStepEventSchema>;
+
+export const detectedPortsEventSchema = z.object({
+  worktreeId: z.string().uuid(),
+  ports: z.array(detectedPortSchema),
+});
+
+export type DetectedPortsEvent = z.infer<typeof detectedPortsEventSchema>;

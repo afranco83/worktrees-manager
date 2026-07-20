@@ -2,7 +2,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import { InvalidProjectConfigFileError, InvalidProjectPathError } from "../errors.js";
-import { readProjectConfigFile, writeProjectConfigFile } from "./config-file.js";
+import {
+  readProjectConfigFile,
+  writeProjectConfigFile,
+  type ProjectConfigFile,
+} from "./config-file.js";
 import { inspectRepoPath } from "./repo-path.js";
 import {
   deleteProject,
@@ -18,6 +22,7 @@ import {
   projectPathLookupSchema,
   projectSchema,
   updateProjectSchema,
+  type Project,
 } from "./schemas.js";
 
 /**
@@ -35,6 +40,17 @@ function tryReadProjectConfigFile(localPath: string): ReturnType<typeof readProj
 
     throw error;
   }
+}
+
+/**
+ * `postCreateCommand` se omite del fichero (en vez de escribir `null`) cuando
+ * el proyecto no tiene uno — ver `projectConfigFileSchema`.
+ */
+function toProjectConfigFile(project: Project): ProjectConfigFile {
+  return {
+    devCommand: project.devCommand,
+    ...(project.postCreateCommand != null && { postCreateCommand: project.postCreateCommand }),
+  };
 }
 
 export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
@@ -93,7 +109,7 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       const project = insertProject(fastify.db, request.body);
 
-      writeProjectConfigFile(project.localPath, { devCommand: project.devCommand });
+      writeProjectConfigFile(project.localPath, toProjectConfigFile(project));
 
       reply.code(201);
 
@@ -113,8 +129,8 @@ export const projectsPlugin: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const project = updateProject(fastify.db, { id: request.params.id, patch: request.body });
 
-      if (request.body.devCommand != null) {
-        writeProjectConfigFile(project.localPath, { devCommand: project.devCommand });
+      if (request.body.devCommand != null || request.body.postCreateCommand !== undefined) {
+        writeProjectConfigFile(project.localPath, toProjectConfigFile(project));
       }
 
       return project;
