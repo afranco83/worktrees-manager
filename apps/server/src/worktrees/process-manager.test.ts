@@ -273,8 +273,14 @@ describe("process manager", () => {
 
   it("should prune log entries beyond the retention limit (2000) once the process has produced enough lines", async () => {
     const lineCount = 2100;
+    // Sin `process.exit()` a propósito: Node no garantiza que las escrituras
+    // a stdout ya encoladas se hayan vaciado al pipe cuando se fuerza la
+    // salida (documentado explícitamente por Node) — con un burst así de
+    // líneas, el hijo podía morir antes de enviarlas todas. Dejando que Node
+    // salga solo al vaciarse el bucle de eventos sí espera a que el pipe
+    // termine de drenar antes de terminar el proceso de verdad.
     const { worktree, project } = setUpWorktree(
-      `for (let i = 0; i < ${lineCount}; i++) { console.log("line " + i); } process.exit(0);`,
+      `for (let i = 0; i < ${lineCount}; i++) { console.log("line " + i); }`,
     );
 
     await manager.start(worktree, project);
