@@ -256,12 +256,18 @@ export function createProcessManager({
       return "failed";
     }
 
+    // 'close', no 'exit': Node no garantiza que los streams de stdio hayan
+    // terminado de emitir datos cuando llega 'exit' (un proceso que escribe
+    // mucho output justo antes de salir puede aún tener líneas sin drenar
+    // del pipe) — 'close' sí espera a que stdio se cierre del todo, evitando
+    // dar la instalación por terminada con output todavía en vuelo.
+    //
     // Igual que en `spawnTracked`: `events.once` añade su propio listener de
-    // `'error'` mientras espera `'exit'` y rechaza si `'error'` llega antes
+    // `'error'` mientras espera `'close'` y rechaza si `'error'` llega antes
     // (raro tras un spawn ya confirmado, pero documentado por Node como
     // posible) — se trata como una instalación fallida, no como una excepción
     // sin capturar.
-    const exitArgs = await once(child, "exit").catch(() => null);
+    const exitArgs = await once(child, "close").catch(() => null);
     const code = exitArgs?.[0] ?? 1;
 
     if (tracked.isStoppingIntentionally) {
@@ -340,7 +346,12 @@ export function createProcessManager({
       PORT: String(worktree.port),
     });
 
-    child.once("exit", (code) => {
+    // 'close', no 'exit': ver el comentario equivalente en
+    // `ensureDependenciesInstalled` — un `devCommand` que imprime un último
+    // burst de líneas justo antes de salir puede dejarlas sin drenar del
+    // pipe si se actúa ya en 'exit', podando (`pruneLogEntries`) sobre un
+    // conjunto de logs todavía incompleto.
+    child.once("close", (code) => {
       const finalStatus: WorktreeProcessStatus =
         tracked.isStoppingIntentionally || code === 0 ? "stopped" : "error";
 
