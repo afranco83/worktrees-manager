@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 5 — Entornos de desarrollo y logs, cerrada el 2026-07-20**; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 6 — Estado de cambios sin commitear, cerrada el 2026-07-21**; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -160,16 +160,26 @@ Verificado también manualmente en navegador (Playwright) contra un proyecto de 
 
 ---
 
-## Fase 6 — Estado de cambios sin commitear
+## Fase 6 — Estado de cambios sin commitear _(cerrada — 2026-07-21)_
 
-**Objetivo**: visibilidad del estado git de cada worktree sin salir del dashboard.
+**Objetivo**: visibilidad del estado git de cada worktree sin salir del dashboard, para evitar borrar un worktree con trabajo pendiente sin darse cuenta.
 
 Tareas:
 
-- [ ] Polling de `git status --porcelain`
-- [ ] Resumen de ficheros modificados / nuevos / borrados
+- [x] Polling del estado git de cada worktree
+- [x] Aviso de seguridad ante el borrado (cambios sin commitear / commits sin subir)
 
-**DoD**: a definir al cerrar Fase 5.
+**DoD**: cada worktree listado muestra si tiene cambios sin commitear y/o commits locales sin subir a ningún remoto conocido, tanto en su card como en el diálogo de confirmación de borrado, sin salir del dashboard. **Cumplido**: decisiones completas en [ADR-0012](./adr/0012-estado-git-sin-commitear.md). 230 tests backend (+13 nuevos: `git-status.test.ts`, extensión de `plugin.test.ts`/`git-worktree.test.ts`) + 36 tests frontend en verde.
+
+**Cambio de enfoque durante la propia implementación**: el DoD original (y la tarea equivalente en Notion) pedía un "resumen numérico" de ficheros modificados/nuevos/borrados — implementado una primera vez y descartado después de que el usuario señalara que un número de cambios no ayuda a decidir nada por sí solo. El objetivo real, redirigido por el propio usuario, es más concreto: avisar antes de que se borre un worktree con trabajo pendiente. Esto separa dos señales distintas: cambios sin commitear (ya bloqueados al borrar desde la Fase 4, pero invisibles hasta el propio intento) y commits sin subir a ningún remoto (sin ninguna protección previa).
+
+**Decisión técnica**: "sin subir" se compara contra `origin/<rama>` si existe copia remota conocida, o contra el **commit base** persistido al crear cada worktree (`worktrees.base_commit_sha`, migración `0007`) si no la hay — evita aproximar contra la rama por defecto, que puede no compartir historia reciente con la base real del worktree. Cómputo on-demand en cada respuesta (mismo patrón que `detectedPorts` de la Fase 5), no polling+push por socket en el backend: el origen del cambio es siempre externo a la app, así que un timer de servidor no tendría ninguna fuente real de la que colgarse — el "polling" real es un `refetchInterval` de 5 s en el frontend.
+
+**Corrección incidental encontrada en el mismo cambio**: el diálogo de confirmación de borrado afirmaba que también se eliminaba la rama del worktree — no es así, `DELETE /worktrees/:id` nunca borra la rama (sobrevive en el repo). Corregido el texto.
+
+Verificado manualmente en navegador (Playwright) contra un worktree real de `store_demo` (creado antes de esta fase: cambios sin commitear detectados correctamente, "sin subir" degradado a sin aviso al no tener `base_commit_sha` persistido, en vez de arriesgar un falso positivo) y, de extremo a extremo, contra un repo temporal desechable: worktree recién creado sin ningún aviso → commit hecho fuera del dashboard sin remoto configurado → badge "Commits sin subir" en ≤5 s sin recargar la página → mismo aviso visible en el diálogo de borrado.
+
+**Mergeada en `main`**: [PR #6](https://github.com/afranco83/worktrees-manager/pull/6), 230 tests backend + 36 tests frontend en verde.
 
 ---
 

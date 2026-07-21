@@ -47,9 +47,10 @@ No es una herramienta genérica para cualquier stack: se optimiza para el flujo 
 - Panel de **logs en tiempo real** (stdout/stderr) del proceso de cada worktree, con histórico consultable de la sesión.
 - Estado visual claro: parado / arrancando / corriendo / error.
 
-### 2.5 Estado de cambios sin commitear
+### 2.5 Aviso de seguridad ante el borrado
 
-- Cada worktree muestra si tiene cambios sin commitear (`git status --porcelain`), refrescado periódicamente (polling), incluyendo un resumen rápido (nº de ficheros modificados/nuevos/borrados).
+- Cada worktree muestra si tiene **cambios sin commitear** (`git status --porcelain`) y/o **commits locales sin subir a ningún remoto conocido**, refrescado periódicamente (polling, sin evento nativo del que colgarse — el origen del cambio es siempre externo a la app).
+- No es un resumen de ficheros: es un aviso para no borrar un worktree con trabajo pendiente sin darse cuenta, visible tanto en su card como en el diálogo de confirmación de borrado. Detalle en [ADR-0012](./adr/0012-estado-git-sin-commitear.md).
 
 ## 3. Fuera de alcance (v1)
 
