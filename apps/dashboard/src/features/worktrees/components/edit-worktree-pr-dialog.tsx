@@ -1,5 +1,5 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -42,10 +42,18 @@ export function EditWorktreePrDialog({
     defaultValues: { prNumber: worktree.prNumber?.toString() ?? "" },
   });
 
+  // `worktree` cambia de referencia en cada refetch de `useWorktrees` (poll
+  // de 5s), incluso cuando `prNumber` no ha cambiado — si el efecto se
+  // disparara en cada cambio de `worktree`, reiniciaría el formulario en
+  // cada poll mientras el diálogo está abierto, borrando lo que el usuario
+  // esté escribiendo. Solo se reinicia en la transición cerrado→abierto.
+  const wasOpenRef = useRef(false);
+
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       reset({ prNumber: worktree.prNumber?.toString() ?? "" });
     }
+    wasOpenRef.current = open;
   }, [open, worktree, reset]);
 
   async function onSubmit(values: UpdateWorktreePrNumberFormValues): Promise<void> {

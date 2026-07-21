@@ -66,7 +66,13 @@ export const pullRequestSchema = z.object({
 export type PullRequestInfo = z.infer<typeof pullRequestSchema>;
 
 export const updateWorktreePrNumberFormSchema = z.object({
-  prNumber: z.string().regex(/^\d*$/, "Indica solo el número de la PR"),
+  // El backend exige un número de PR positivo (`z.number().int().positive()`,
+  // GitHub nunca numera una PR como 0) — se refleja aquí para no depender del
+  // 400 del servidor ante ese caso concreto.
+  prNumber: z
+    .string()
+    .regex(/^\d*$/, "Indica solo el número de la PR")
+    .refine((value) => value === "" || Number(value) > 0, "El número de PR debe ser mayor que 0"),
 });
 
 export type UpdateWorktreePrNumberFormValues = z.infer<typeof updateWorktreePrNumberFormSchema>;
