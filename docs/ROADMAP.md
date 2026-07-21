@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 6 — Estado de cambios sin commitear, cerrada el 2026-07-21**; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 7 — Integración con Pull Requests, cerrada el 2026-07-21**; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -183,17 +183,25 @@ Verificado manualmente en navegador (Playwright) contra un worktree real de `sto
 
 ---
 
-## Fase 7 — Integración con Pull Requests
+## Fase 7 — Integración con Pull Requests _(cerrada — 2026-07-21)_
 
 **Objetivo**: ver el estado de la PR asociada a un worktree sin salir del dashboard.
 
 Tareas:
 
-- [ ] Asociación manual (o por nombre de rama) con `gh` CLI
-- [ ] Estado: abierta / cerrada / mergeada, checks de CI
-- [ ] Enlace directo a GitHub
+- [x] Asociación manual (o por nombre de rama) con `gh` CLI
+- [x] Estado: abierta / cerrada / mergeada
+- [x] Enlace directo a GitHub
 
-**DoD**: a definir al cerrar Fase 6.
+**DoD**: un worktree con PR asociada muestra su estado y enlaza directamente a GitHub. **Cumplido**: decisiones completas en [ADR-0013](./adr/0013-integracion-pull-requests.md). 238 tests backend (+8 nuevos: `github-cli.test.ts`, extensión de `plugin.test.ts`) + 42 tests frontend en verde.
+
+**Alcance reducido a propósito respecto a la tarea original de Notion**: "checks de CI" quedó fuera — a petición explícita del usuario, "lo único que interesa es la PR como enlace y su estado, no necesitamos información ampliada". `gh pr view` expone bastante más (`statusCheckRollup`, `mergeable`...), pero no aporta nada pedido y añadiría una superficie de parseo del JSON de `gh` (que varía según el origen del check) sin necesidad real detrás.
+
+**Decisión técnica**: la asociación se resuelve con `worktree.prNumber` (override manual persistido, mismo rol que `devCommandOverride`) si está seteado, o por nombre de rama si no — `gh pr view <ref>` acepta ambos indistintamente y resuelve el repo de GitHub a partir del remoto `origin` del propio directorio, sin que la app parsee ni persista la URL del remoto ella misma (`Project.repoOwner`/`repoName`, en el schema desde la Fase 2, siguen sin usarse). A diferencia de `detectedPorts`/`gitStatus` (cómputo local gratis, refrescado cada 5s), el estado de una PR es una llamada de red real a la API de GitHub: endpoints propios `GET`/`PATCH /worktrees/:id/pull-request`, con su propia interfaz inyectable `GitHubCli` (mismo patrón que `TerminalLauncher`, ya que `gh pr view` no puede ejercitarse de forma determinista en CI) y refresco desacoplado del resto del listado (60s en el frontend, no el poll de 5s de `useWorktrees`).
+
+**Hallazgos de una ronda de `/code-review` sobre el diff, corregidos**: `parseGhPrViewOutput` validaba el JSON de `gh pr view` con un `as` en vez de Zod (dato externo sin validar en el borde, contra el canon); el diálogo nuevo de asociar PR reiniciaba el formulario en cada poll de 5s de `useWorktrees` mientras estaba abierto, borrando lo que el usuario estuviera escribiendo — el mismo bug ya existía, sin detectar, en el diálogo de comando de arranque desde la Fase 5, y se corrigió en ambos a la vez (con tests de regresión); el formulario del número de PR aceptaba "0", que el backend rechaza.
+
+**Mergeada en `main`**: [PR #7](https://github.com/afranco83/worktrees-manager/pull/7), 238 tests backend + 42 tests frontend en verde.
 
 ---
 

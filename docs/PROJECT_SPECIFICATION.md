@@ -37,9 +37,9 @@ No es una herramienta genérica para cualquier stack: se optimiza para el flujo 
 
 ### 2.3 Integración con Pull Requests
 
-- Asociar manualmente (o detectar automáticamente por nombre de rama) la PR de GitHub correspondiente a un worktree.
-- Mostrar su estado: abierta / cerrada / mergeada, checks de CI si están disponibles, y enlace directo a GitHub.
-- Integración vía **GitHub CLI (`gh`)**, asumiendo que está instalada y autenticada en la máquina — sin gestión propia de tokens.
+- Asociar manualmente (número de PR) o automáticamente (por nombre de rama) la PR de GitHub correspondiente a un worktree.
+- Mostrar su estado (abierta / cerrada / mergeada) con enlace directo a GitHub — sin detalle de checks de CI (deliberadamente fuera de alcance, decisión explícita al implementar: no aporta nada que se haya pedido).
+- Integración vía **GitHub CLI (`gh`)**, asumiendo que está instalada y autenticada en la máquina — sin gestión propia de tokens. El repo de GitHub se resuelve por `gh` a partir del remoto `origin` del propio directorio, sin que la app parsee ni persista la URL del remoto ella misma. Detalle en [ADR-0013](./adr/0013-integracion-pull-requests.md).
 
 ### 2.4 Arranque / parada de entornos y logs
 
