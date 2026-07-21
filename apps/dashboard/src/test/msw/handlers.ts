@@ -337,7 +337,15 @@ export const handlers = [
       );
     }
 
-    const updated: Worktree = { ...entry.worktree, processStatus: "running", pid: 12345 };
+    const updated: Worktree = {
+      ...entry.worktree,
+      processStatus: "running",
+      pid: 12345,
+      // La card espera a ver un puerto real detectado antes de dar el
+      // arranque por terminado (ver `worktrees-card-list.tsx`) — un arranque
+      // que nunca reporta ningún puerto no reflejaría un `devCommand` real.
+      detectedPorts: [{ port: entry.worktree.port, label: null }],
+    };
     worktreesStore = {
       ...worktreesStore,
       [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>

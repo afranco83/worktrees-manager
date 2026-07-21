@@ -2,15 +2,9 @@ import { GitBranchPlus, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useWorktrees } from "@/features/worktrees/api/use-worktrees";
 import { CreateWorktreeDialog } from "@/features/worktrees/components/create-worktree-dialog";
 import { DeleteWorktreeDialog } from "@/features/worktrees/components/delete-worktree-dialog";
@@ -57,10 +51,16 @@ export function ProjectDetailPage() {
     <div className="flex flex-col gap-6 p-6">
       <Card>
         <CardHeader>
-          <CardTitle level={2} className="text-xl">
-            {project.name}
-          </CardTitle>
-          <CardDescription>{project.localPath}</CardDescription>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <CardTitle level={2} className="w-fit truncate text-xl">
+                  {project.name}
+                </CardTitle>
+              }
+            />
+            <TooltipContent>{project.localPath}</TooltipContent>
+          </Tooltip>
           <CardAction className="flex gap-2">
             <IconButton
               icon={Pencil}
@@ -107,7 +107,6 @@ export function ProjectDetailPage() {
           <WorktreesCardList
             worktrees={worktrees.data}
             stepByWorktreeId={worktrees.stepByWorktreeId}
-            latestLogByWorktreeId={worktrees.latestLogByWorktreeId}
             onDelete={(worktree) => setDialogState({ type: "delete-worktree", worktree })}
           />
         )}

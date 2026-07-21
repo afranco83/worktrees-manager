@@ -4,7 +4,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { projectSchema, type Project } from "@/features/projects/schemas";
 import {
@@ -44,6 +44,16 @@ function renderApp(initialPath = "/"): void {
   );
 }
 
+// Abrir el menú "Más" con `user.click` no responde de forma fiable en
+// jsdom — particularidad conocida de simulación de eventos de puntero de
+// base-ui bajo jsdom, no reproducible con un ratón real (verificado
+// manualmente en navegador). La activación por teclado sí abre con
+// fiabilidad, y es una forma igual de válida y accesible de hacerlo.
+async function openMoreActionsMenu(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  screen.getByRole("button", { name: "Más" }).focus();
+  await user.keyboard("{Enter}");
+}
+
 describe("app routes", () => {
   beforeEach(() => {
     resetProjectsStore();
@@ -64,11 +74,8 @@ describe("app routes", () => {
     resetProjectsStore([EXISTING_PROJECT]);
     renderApp();
 
-    expect(await screen.findByRole("heading", { name: EXISTING_PROJECT.name })).toBeInTheDocument();
-    // La ruta local también aparece en el sidebar: se acota la búsqueda al panel
-    // de detalle (<main>) para no ser ambiguo.
     expect(
-      within(screen.getByRole("main")).getByText(EXISTING_PROJECT.localPath),
+      await within(screen.getByRole("main")).findByRole("heading", { name: EXISTING_PROJECT.name }),
     ).toBeInTheDocument();
   });
 
@@ -306,7 +313,8 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    await user.click(screen.getByRole("button", { name: "Abrir terminal" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Terminal" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -323,15 +331,15 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    expect(screen.getByText("Parado")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Arrancar" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
 
-    expect(await screen.findByText("Corriendo")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Parar" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Parar entorno" }));
+    await user.click(screen.getByRole("button", { name: "Parar" }));
 
-    expect(await screen.findByText("Parado")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Arrancar" })).toBeInTheDocument();
   });
 
   it("should set and clear a worktree's dev command override", async () => {
@@ -348,7 +356,8 @@ describe("app routes", () => {
 
     expect(screen.queryByText("Comando personalizado")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Comando de arranque" }));
     await user.type(
       screen.getByLabelText("Comando de arranque"),
       "pnpm dev -- --filter=api --filter=storefront",
@@ -357,7 +366,8 @@ describe("app routes", () => {
 
     expect(await screen.findByText("Comando personalizado")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Comando de arranque" }));
     await user.clear(screen.getByLabelText("Comando de arranque"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
@@ -380,13 +390,15 @@ describe("app routes", () => {
 
     expect(screen.queryByText(/^PR #/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Asociar PR" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "PR" }));
     await user.type(screen.getByLabelText("Número de PR"), "7");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     expect(await screen.findByText("PR #7 · Abierta")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Asociar PR" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "PR" }));
     await user.clear(screen.getByLabelText("Número de PR"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
@@ -407,12 +419,130 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
-    await screen.findByText("Corriendo");
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
+    await screen.findByRole("button", { name: "Parar" });
 
-    await user.click(screen.getByRole("button", { name: "Ver logs" }));
+    await user.click(screen.getByRole("button", { name: "Logs" }));
 
     expect(await screen.findByText("Servidor de desarrollo arrancado")).toBeInTheDocument();
+  });
+
+  it("should clear the visible log entries without deleting the underlying history", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
+    await screen.findByRole("button", { name: "Parar" });
+
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+    await screen.findByText("Servidor de desarrollo arrancado");
+
+    await user.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(screen.queryByText("Servidor de desarrollo arrancado")).not.toBeInTheDocument();
+    expect(screen.getByText("Todavía no hay salida de este proceso.")).toBeInTheDocument();
+
+    // Solo limpia la vista actual: al reabrir el diálogo, el histórico sigue
+    // ahí de verdad (no se ha borrado nada en el servidor).
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+
+    expect(await screen.findByText("Servidor de desarrollo arrancado")).toBeInTheDocument();
+  });
+
+  it("should copy the plain-text log to the clipboard", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    // Se muta `navigator.clipboard` en vez de sustituir todo `navigator` vía
+    // `vi.stubGlobal`: un `{ ...navigator }` sale vacío (sus propiedades
+    // reales viven en el prototipo), así que reemplazarlo entero rompería
+    // cualquier otro código que dependa de un `navigator` real durante el
+    // test. Se define DESPUÉS de `userEvent.setup()` a propósito: este
+    // último instala su propio stub de `navigator.clipboard` (lo necesita
+    // para simular copiar/pegar), y lo haría después si se definiera antes,
+    // pisando este mock.
+    const originalClipboard = navigator.clipboard as Clipboard | undefined;
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    try {
+      renderApp();
+
+      await screen.findByText("Todavía no hay worktrees creados.");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await screen.findByText("feature-a");
+
+      await user.click(screen.getByRole("button", { name: "Arrancar" }));
+      await screen.findByRole("button", { name: "Parar" });
+
+      await user.click(screen.getByRole("button", { name: "Logs" }));
+      await screen.findByText("Servidor de desarrollo arrancado");
+
+      await user.click(screen.getByRole("button", { name: "Copiar" }));
+
+      // El botón solo pasa a "Copiado" después de que `writeText` resuelva
+      // (`handleCopy` es async) — esperar a él antes de comprobar la llamada
+      // asegura que la promesa ya se ha resuelto.
+      expect(await screen.findByRole("button", { name: "Copiado" })).toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining("Servidor de desarrollo arrancado"),
+      );
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        value: originalClipboard,
+        configurable: true,
+      });
+    }
+  });
+
+  it("should download the plain-text log as a .txt file named after the branch", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+    const objectUrl = "blob:mock-url";
+    // Se sobrescriben solo los dos métodos estáticos necesarios — sustituir
+    // el propio `URL` global (vía `vi.stubGlobal`) rompe cualquier `new URL()`
+    // real que ocurra durante el test (usado, p. ej., por react-router).
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => objectUrl);
+    URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    try {
+      const user = userEvent.setup();
+      renderApp();
+
+      await screen.findByText("Todavía no hay worktrees creados.");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await screen.findByText("feature-a");
+
+      await user.click(screen.getByRole("button", { name: "Arrancar" }));
+      await screen.findByRole("button", { name: "Parar" });
+
+      await user.click(screen.getByRole("button", { name: "Logs" }));
+      await screen.findByText("Servidor de desarrollo arrancado");
+
+      await user.click(screen.getByRole("button", { name: "Descargar" }));
+
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(clickSpy.mock.instances[0]).toHaveProperty("download", "feature-a-logs.txt");
+      expect(clickSpy.mock.instances[0]).toHaveProperty("href", objectUrl);
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+      clickSpy.mockRestore();
+    }
   });
 
   it("should delete a clean worktree when the deletion is confirmed", async () => {
@@ -427,7 +557,8 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    await user.click(screen.getByRole("button", { name: "Borrar worktree" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Borrar" }));
     await screen.findByText("Borrar worktree: feature-a");
     await user.click(screen.getByRole("button", { name: "Borrar" }));
 
@@ -448,7 +579,8 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-dirty");
 
-    await user.click(screen.getByRole("button", { name: "Borrar worktree" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Borrar" }));
     await user.click(screen.getByRole("button", { name: "Borrar" }));
 
     const forceButton = await screen.findByRole("button", { name: "Forzar borrado" });
