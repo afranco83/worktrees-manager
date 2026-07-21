@@ -36,6 +36,7 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     expect(listWorktreesByProject(db, projectId)).toEqual([created]);
@@ -54,12 +55,14 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     insertWorktree(db, {
       projectId: otherProjectId,
       branch: "feature-b",
       path: "/repos/bar.worktrees/feature-b",
       port: 4101,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     expect(listUsedPorts(db)).toEqual(expect.arrayContaining([4100, 4101]));
@@ -71,6 +74,7 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     expect(() =>
@@ -79,6 +83,7 @@ describe("worktrees repository", () => {
         branch: "feature-b",
         path: "/repos/foo.worktrees/feature-b",
         port: 4100,
+        baseCommitSha: "0000000000000000000000000000000000000000",
       }),
     ).toThrow(NoFreePortAvailableError);
   });
@@ -89,6 +94,7 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     deleteWorktree(db, created.id);
@@ -106,6 +112,7 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     updateWorktreeProcessState(db, created.id, { processStatus: "running", pid: 12345 });
@@ -119,6 +126,7 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     expect(created.devCommandOverride).toBeNull();
 
@@ -146,12 +154,14 @@ describe("worktrees repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     const alreadyStopped = insertWorktree(db, {
       projectId,
       branch: "feature-b",
       path: "/repos/foo.worktrees/feature-b",
       port: 4101,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     updateWorktreeProcessState(db, running.id, { processStatus: "running", pid: 12345 });
 

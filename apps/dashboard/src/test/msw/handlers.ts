@@ -224,6 +224,7 @@ export const handlers = [
       createdAt: new Date().toISOString(),
       devCommandOverride: null,
       detectedPorts: [],
+      gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: false },
     };
     nextWorktreePort += 1;
 

@@ -80,6 +80,7 @@ describe("socket.io wiring", () => {
       branch: "feature-socket",
       path: dir,
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     client = await connectClient();

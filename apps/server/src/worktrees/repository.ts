@@ -16,6 +16,10 @@ interface WorktreeRow {
   pr_number: number | null;
   created_at: string;
   dev_command_override: string | null;
+  // Interno — no forma parte del `Worktree` público, solo lo lee
+  // `getWorktreeBaseCommitSha()` para que `withGitStatus()` (`plugin.ts`)
+  // pueda calcular `hasUnpushedCommits` sin copia remota de la rama.
+  base_commit_sha: string | null;
 }
 
 function toWorktree(row: WorktreeRow): Worktree {
@@ -33,6 +37,11 @@ function toWorktree(row: WorktreeRow): Worktree {
     // No persistido — placeholder aquí; `plugin.ts` lo sustituye por el valor
     // real leído de `processManager.getDetectedPorts()` antes de responder.
     detectedPorts: [],
+    // Idem, sustituido por `withGitStatus()` en `plugin.ts` allí donde se
+    // aplica; el placeholder "limpio" (no `null`) es el valor por defecto
+    // porque el único caso donde no se sustituye es la creación, y un
+    // worktree recién creado está genuinamente sin cambios.
+    gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: false },
   };
 }
 
@@ -65,16 +74,30 @@ export function listUsedPorts(db: Database.Database): number[] {
 
 export function insertWorktree(
   db: Database.Database,
-  input: { projectId: string; branch: string; path: string; port: number },
+  input: {
+    projectId: string;
+    branch: string;
+    path: string;
+    port: number;
+    baseCommitSha: string;
+  },
 ): Worktree {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
   try {
     db.prepare(
-      `INSERT INTO worktrees (id, project_id, branch, path, port, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(id, input.projectId, input.branch, input.path, input.port, createdAt);
+      `INSERT INTO worktrees (id, project_id, branch, path, port, base_commit_sha, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      input.projectId,
+      input.branch,
+      input.path,
+      input.port,
+      input.baseCommitSha,
+      createdAt,
+    );
   } catch (error) {
     if (
       error instanceof Database.SqliteError &&
@@ -99,7 +122,18 @@ export function insertWorktree(
     createdAt,
     devCommandOverride: null,
     detectedPorts: [],
+    gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: false },
   };
+}
+
+export function getWorktreeBaseCommitSha(db: Database.Database, id: string): string | null {
+  const row = db
+    .prepare<[string], { base_commit_sha: string | null }>(
+      "SELECT base_commit_sha FROM worktrees WHERE id = ?",
+    )
+    .get(id);
+
+  return row?.base_commit_sha ?? null;
 }
 
 export function deleteWorktree(db: Database.Database, id: string): void {

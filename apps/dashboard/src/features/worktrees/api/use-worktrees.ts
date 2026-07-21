@@ -23,6 +23,12 @@ export function useWorktrees(projectId: string) {
   const query = useQuery({
     queryKey: worktreesQueryKey(projectId),
     queryFn: () => fetchWorktrees(projectId),
+    // `gitStatus` cambia por ediciones externas (el usuario edita ficheros en
+    // su IDE), sin ningún evento del que el backend pueda avisar por socket
+    // (ver ADR-0012) — el "tiempo real" aquí es refetch periódico. Se deja
+    // `refetchIntervalInBackground` en su valor por defecto (pausado sin foco
+    // de pestaña) para no recalcular `git status` de worktrees que nadie mira.
+    refetchInterval: 5000,
   });
 
   // Estado en vivo transitorio (no forma parte del `Worktree` persistido):

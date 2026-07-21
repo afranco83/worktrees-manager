@@ -19,7 +19,7 @@ const DEFAULT_BRANCH_CANDIDATES = ["main", "master"];
  * sobre el stderr real ("already exists", "contains modified..."), que sale
  * localizado (p. ej. en es_ES) si no se fija el locale del proceso hijo.
  */
-const GIT_ENV = { ...process.env, LC_ALL: "C" };
+export const GIT_ENV = { ...process.env, LC_ALL: "C" };
 
 /**
  * Valida el nombre con el propio git (delega en sus reglas de referencia) antes de
@@ -86,6 +86,17 @@ export async function getCurrentBranch(repoPath: string): Promise<string | null>
   const branch = stdout.trim();
 
   return branch === "HEAD" ? null : branch;
+}
+
+/**
+ * Se invoca sobre el worktree recién creado (no sobre el repo principal):
+ * justo tras `git worktree add`, `HEAD` ahí es exactamente el commit base,
+ * sin tener que resolver `baseRef` por separado (ver ADR-0012).
+ */
+export async function resolveHeadCommitSha(repoPath: string): Promise<string> {
+  const { stdout } = await execa("git", ["rev-parse", "HEAD"], { cwd: repoPath, env: GIT_ENV });
+
+  return stdout.trim();
 }
 
 export async function listLocalBranches(repoPath: string): Promise<string[]> {

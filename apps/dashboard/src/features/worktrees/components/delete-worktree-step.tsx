@@ -37,10 +37,16 @@ export function DeleteWorktreeStep({
       <DialogHeader>
         <DialogTitle>Borrar worktree: {worktree.branch}</DialogTitle>
         <DialogDescription>
-          Se eliminará el directorio <code>{worktree.path}</code> y la rama{" "}
-          <code>{worktree.branch}</code> del disco.
+          Se eliminará el directorio <code>{worktree.path}</code> del disco. La rama{" "}
+          <code>{worktree.branch}</code> no se borra: sigue existiendo en el repositorio.
         </DialogDescription>
       </DialogHeader>
+      {worktree.gitStatus?.hasUnpushedCommits && (
+        <p className="text-sm text-muted-foreground" role="alert">
+          Esta rama tiene commits sin subir a ningún remoto conocido — solo existen en este worktree
+          y en el propio repositorio local.
+        </p>
+      )}
       {deleteWorktree.isError && (
         <p className="text-sm text-destructive" role="alert">
           {deleteWorktree.error.message}

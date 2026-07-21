@@ -18,6 +18,7 @@ import { useStopWorktree } from "../api/use-stop-worktree";
 import { stripAnsiCodes } from "../lib/strip-ansi-codes";
 import type {
   DetectedPort,
+  GitStatusSummary,
   LogEntry,
   Worktree,
   WorktreeProcessStatus,
@@ -83,6 +84,23 @@ function WorktreePorts({ worktree }: { worktree: Worktree }) {
         <PortLink key={port} port={port} label={label} />
       ))}
     </div>
+  );
+}
+
+// Aviso de seguridad ante el borrado, no un resumen de ficheros (ver
+// ADR-0012): silencio cuando no hay nada pendiente o cuando `gitStatus` es
+// `null` (no se pudo determinar, p. ej. el directorio ya no existe en
+// disco) — mostrar "sin cambios" en ese caso afirmaría algo que no se sabe.
+function GitStatusBadge({ gitStatus }: { gitStatus: GitStatusSummary | null }) {
+  if (gitStatus === null) {
+    return null;
+  }
+
+  return (
+    <>
+      {gitStatus.hasUncommittedChanges && <Badge variant="secondary">Cambios sin commitear</Badge>}
+      {gitStatus.hasUnpushedCommits && <Badge variant="secondary">Commits sin subir</Badge>}
+    </>
   );
 }
 
@@ -153,6 +171,7 @@ function WorktreeCard({
           {worktree.devCommandOverride != null && (
             <Badge variant="outline">Comando personalizado</Badge>
           )}
+          <GitStatusBadge gitStatus={worktree.gitStatus} />
           <WorktreePorts worktree={worktree} />
         </div>
         {isTransitioning && step != null && (

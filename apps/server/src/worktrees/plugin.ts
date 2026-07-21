@@ -1,3 +1,5 @@
+import type Database from "better-sqlite3";
+import type { FastifyBaseLogger } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
@@ -5,6 +7,7 @@ import { CurrentBranchNotFoundError, GitWorktreeOperationError, NotFoundError } 
 import { getProjectById } from "../projects/repository.js";
 import { getSettings } from "../settings/repository.js";
 import { copyGitignoredEnvFiles } from "./env-files.js";
+import { getWorktreeGitStatus } from "./git-status.js";
 import {
   addWorktree,
   assertValidBranchName,
@@ -15,6 +18,7 @@ import {
   listLocalBranches,
   removeWorktree,
   resolveDefaultBranch,
+  resolveHeadCommitSha,
 } from "./git-worktree.js";
 import { listRecentLogEntries } from "./log-repository.js";
 import { assignFreePort } from "./port-allocator.js";
@@ -23,6 +27,7 @@ import type { ProcessManager } from "./process-manager.js";
 import { withProjectLock } from "./project-lock.js";
 import {
   deleteWorktree,
+  getWorktreeBaseCommitSha,
   getWorktreeById,
   insertWorktree,
   listUsedPorts,
@@ -40,6 +45,7 @@ import {
   worktreeIdParamsSchema,
   worktreeSchema,
   type DetectedPort,
+  type GitStatusSummary,
   type WorktreeBase,
 } from "./schemas.js";
 import { openTerminalAt } from "./terminal.js";
@@ -106,6 +112,37 @@ function withDetectedPorts<T extends { id: string }>(
   return { ...worktree, detectedPorts: processManager.getDetectedPorts(worktree.id) };
 }
 
+/**
+ * `gitStatus` tampoco se persiste (ver `schemas.ts`): se calcula en caliente
+ * ejecutando git sobre el directorio del worktree — señal de seguridad ante
+ * el borrado (cambios sin commitear / commits sin subir), no un resumen de
+ * ficheros (ver ADR-0012). Es async (procesos git reales) y puede fallar
+ * (p. ej. el directorio ya no existe en disco, borrado fuera de la app) — un
+ * fallo aquí no debe tumbar la respuesta de los demás worktrees, así que se
+ * degrada a `null` en vez de propagar.
+ */
+async function withGitStatus<T extends { id: string; path: string; branch: string }>(
+  logger: FastifyBaseLogger,
+  db: Database.Database,
+  worktree: T,
+): Promise<T & { gitStatus: GitStatusSummary | null }> {
+  try {
+    const baseCommitSha = getWorktreeBaseCommitSha(db, worktree.id);
+
+    return {
+      ...worktree,
+      gitStatus: await getWorktreeGitStatus(worktree.path, worktree.branch, baseCommitSha),
+    };
+  } catch (error) {
+    logger.warn(
+      { err: error, worktreeId: worktree.id },
+      `No se pudo leer el estado git de "${worktree.path}"`,
+    );
+
+    return { ...worktree, gitStatus: null };
+  }
+}
+
 export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/projects/:projectId/git-info",
@@ -155,8 +192,14 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const project = requireProject(fastify.db, request.params.projectId);
 
-      return listWorktreesByProject(fastify.db, project.id).map((worktree) =>
-        withDetectedPorts(fastify.processManager, worktree),
+      return Promise.all(
+        listWorktreesByProject(fastify.db, project.id).map((worktree) =>
+          withGitStatus(
+            request.log,
+            fastify.db,
+            withDetectedPorts(fastify.processManager, worktree),
+          ),
+        ),
       );
     },
   );
@@ -211,11 +254,14 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           try {
+            const baseCommitSha = await resolveHeadCommitSha(worktreePath);
+
             return insertWorktree(fastify.db, {
               projectId: project.id,
               branch: request.body.newBranch,
               path: worktreePath,
               port,
+              baseCommitSha,
             });
           } catch (error) {
             // El worktree ya se creó en disco (directorio + rama) pero no se pudo
@@ -276,7 +322,11 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
         request.body.devCommandOverride,
       );
 
-      return withDetectedPorts(fastify.processManager, updated);
+      return withGitStatus(
+        request.log,
+        fastify.db,
+        withDetectedPorts(fastify.processManager, updated),
+      );
     },
   );
 
@@ -333,7 +383,11 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       await fastify.processManager.start(worktree, project);
 
-      return withDetectedPorts(fastify.processManager, requireWorktree(fastify.db, worktree.id));
+      return withGitStatus(
+        request.log,
+        fastify.db,
+        withDetectedPorts(fastify.processManager, requireWorktree(fastify.db, worktree.id)),
+      );
     },
   );
 
@@ -345,7 +399,11 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
       await fastify.processManager.stop(worktree.id);
 
-      return withDetectedPorts(fastify.processManager, requireWorktree(fastify.db, worktree.id));
+      return withGitStatus(
+        request.log,
+        fastify.db,
+        withDetectedPorts(fastify.processManager, requireWorktree(fastify.db, worktree.id)),
+      );
     },
   );
 

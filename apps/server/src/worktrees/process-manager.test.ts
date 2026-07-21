@@ -105,6 +105,7 @@ describe("process manager", () => {
       branch: `feature-${tempDirs.length}`,
       path: dir,
       port: options.port ?? 4100 + tempDirs.length,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     const project = { ...baseProject, devCommand: `node ${scriptPath}` };
 
@@ -243,6 +244,7 @@ describe("process manager", () => {
       branch: "feature-missing-path",
       path: "/this/path/does/not/exist/at/all",
       port: 4999,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     const project = { ...baseProject, devCommand: "echo hi" };
 
@@ -266,6 +268,7 @@ describe("process manager", () => {
       branch: "feature-not-running",
       path: "/repos/foo.worktrees/feature-a",
       port: 4998,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
 
     await expect(manager.stop(worktree.id)).rejects.toThrow(WorktreeProcessNotRunningError);

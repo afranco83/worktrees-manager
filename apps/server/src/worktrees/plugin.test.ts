@@ -244,6 +244,68 @@ describe("worktrees plugin", () => {
     );
   });
 
+  it("should report a clean, fully-pushed gitStatus right after creating a worktree", async () => {
+    const project = await createProject();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-clean-status", base: { type: "default" } },
+    });
+
+    expect(response.json()).toMatchObject({
+      gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: false },
+    });
+  });
+
+  it("should report a worktree's uncommitted changes when listing worktrees", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-dirty-status", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    writeFileSync(join(worktree.path, "untracked.txt"), "dirty");
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/worktrees`,
+    });
+
+    expect(response.json()).toMatchObject([
+      {
+        id: worktree.id,
+        gitStatus: { hasUncommittedChanges: true, hasUnpushedCommits: false },
+      },
+    ]);
+  });
+
+  it("should report a worktree's committed-but-unpushed work when listing worktrees", async () => {
+    const project = await createProject();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-unpushed-status", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    writeFileSync(join(worktree.path, "own-work.txt"), "own work");
+    execFileSync("git", ["add", "."], { cwd: worktree.path, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "own work"], { cwd: worktree.path, stdio: "ignore" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/worktrees`,
+    });
+
+    expect(response.json()).toMatchObject([
+      {
+        id: worktree.id,
+        gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: true },
+      },
+    ]);
+  });
+
   it("should assign non-colliding ports to two worktrees of the same project", async () => {
     const project = await createProject();
 
