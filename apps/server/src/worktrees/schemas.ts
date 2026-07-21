@@ -14,6 +14,13 @@ export const detectedPortSchema = z.object({
 
 export type DetectedPort = z.infer<typeof detectedPortSchema>;
 
+export const gitStatusSchema = z.object({
+  hasUncommittedChanges: z.boolean(),
+  hasUnpushedCommits: z.boolean(),
+});
+
+export type GitStatusSummary = z.infer<typeof gitStatusSchema>;
+
 export const worktreeSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string().uuid(),
@@ -35,6 +42,12 @@ export const worktreeSchema = z.object({
   // workspaces...) puede levantar varios puertos distintos del único `port`
   // asignado, que solo es el que se pasa como variable de entorno PORT.
   detectedPorts: z.array(detectedPortSchema),
+  // Tampoco persistido: se calcula en caliente ejecutando git sobre el
+  // directorio del worktree (ver `git-status.ts`) — señal de seguridad ante
+  // el borrado, no un resumen de ficheros (ver ADR-0012). `null` significa
+  // que no se pudo determinar ahora mismo (p. ej. el directorio ya no existe
+  // en disco) — no se confunde con "sin nada pendiente".
+  gitStatus: gitStatusSchema.nullable(),
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;

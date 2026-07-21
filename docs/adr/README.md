@@ -17,3 +17,4 @@ A diferencia de otros repos propios sobre el mismo modelo documental, aquí no h
 | [0009](./0009-comando-de-arranque-por-worktree.md)            | Override de `devCommand` por worktree (texto libre) en vez de checkboxes + orquestación propia por app                                              |
 | [0010](./0010-copia-de-ficheros-env-al-crear-un-worktree.md)  | Copia automática de `.env*` gitignoreados al crear un worktree, vía `git ls-files --others --ignored` (no reimplementa el matching de `.gitignore`) |
 | [0011](./0011-comando-posterior-a-la-creacion.md)             | Comando posterior a la creación, configurable por proyecto, para bootstrap automático (migrar/seedear una BD local) tras crear cada worktree        |
+| [0012](./0012-estado-git-sin-commitear.md)                    | Aviso de seguridad ante el borrado: cambios sin commitear + commits sin subir (commit base persistido, sin remoto conocido = todo sin subir)        |

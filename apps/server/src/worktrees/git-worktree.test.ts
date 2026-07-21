@@ -22,6 +22,7 @@ import {
   listLocalBranches,
   removeWorktree,
   resolveDefaultBranch,
+  resolveHeadCommitSha,
 } from "./git-worktree.js";
 
 function initGitRepo(repoPath: string): void {
@@ -205,6 +206,15 @@ describe("git-worktree against a real repo", () => {
     expect(
       execFileSync("git", ["branch", "--show-current"], { cwd: worktreePath }).toString().trim(),
     ).toBe("nuevarama");
+  });
+
+  it("should resolve HEAD to the same commit sha reported by git itself", async () => {
+    const repoPath = trackRepo();
+    const expectedSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoPath })
+      .toString()
+      .trim();
+
+    await expect(resolveHeadCommitSha(repoPath)).resolves.toBe(expectedSha);
   });
 
   it("should return the current branch name when HEAD is attached", async () => {

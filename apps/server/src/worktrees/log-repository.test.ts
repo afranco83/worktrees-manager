@@ -25,6 +25,7 @@ describe("log repository", () => {
       branch: "feature-a",
       path: "/repos/foo.worktrees/feature-a",
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     }).id;
   });
 
@@ -46,6 +47,7 @@ describe("log repository", () => {
       branch: "feature-b",
       path: "/repos/bar.worktrees/feature-b",
       port: 4101,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     }).id;
     insertLogEntry(db, otherWorktreeId, { stream: "stdout", content: "other worktree" });
     const own = insertLogEntry(db, worktreeId, { stream: "stdout", content: "this worktree" });
@@ -89,6 +91,7 @@ describe("log repository", () => {
       branch: "feature-b",
       path: "/repos/bar.worktrees/feature-b",
       port: 4101,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     }).id;
 
     for (let index = 0; index < 5; index += 1) {

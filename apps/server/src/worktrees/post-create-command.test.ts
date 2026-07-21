@@ -51,6 +51,7 @@ describe("runPostCreateCommand", () => {
       branch: "feature-a",
       path: worktreePath,
       port: 4100,
+      baseCommitSha: "0000000000000000000000000000000000000000",
     });
     worktreeId = worktree.id;
   });

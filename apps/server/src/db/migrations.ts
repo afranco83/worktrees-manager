@@ -98,4 +98,14 @@ export const migrations: Migration[] = [
       ALTER TABLE projects ADD COLUMN post_create_command TEXT;
     `,
   },
+  {
+    // Commit del que partió cada worktree al crearse — permite calcular si
+    // tiene commits propios sin subir cuando no existe copia remota de la
+    // rama (ver ADR-0012). NULL para worktrees creados antes de esta
+    // columna: se degrada a "no se puede determinar", no a un falso positivo.
+    name: "0007_worktrees_base_commit_sha",
+    up: `
+      ALTER TABLE worktrees ADD COLUMN base_commit_sha TEXT;
+    `,
+  },
 ];

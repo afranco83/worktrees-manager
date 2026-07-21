@@ -14,6 +14,13 @@ export const detectedPortSchema = z.object({
 
 export type DetectedPort = z.infer<typeof detectedPortSchema>;
 
+export const gitStatusSchema = z.object({
+  hasUncommittedChanges: z.boolean(),
+  hasUnpushedCommits: z.boolean(),
+});
+
+export type GitStatusSummary = z.infer<typeof gitStatusSchema>;
+
 export const worktreeSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string().uuid(),
@@ -32,6 +39,11 @@ export const worktreeSchema = z.object({
   // (ver ADR-0007/`process-manager.ts`) — un monorepo con varias apps puede
   // levantar varios puertos distintos del único `port` asignado.
   detectedPorts: z.array(detectedPortSchema),
+  // Tampoco persistido: calculado en caliente en el backend — señal de
+  // seguridad ante el borrado (cambios sin commitear / commits sin subir a
+  // ningún remoto conocido), ver ADR-0012. `null` = no se pudo determinar
+  // ahora mismo (p. ej. el directorio del worktree ya no existe en disco).
+  gitStatus: gitStatusSchema.nullable(),
 });
 
 export type Worktree = z.infer<typeof worktreeSchema>;
