@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 7 — Integración con Pull Requests, cerrada el 2026-07-21**; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 8 — UI/UX, en curso desde el 2026-07-21**; Fase 7 cerrada el 2026-07-21; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -205,7 +205,19 @@ Tareas:
 
 ---
 
-## Fase 8 — Distribución
+## Fase 8 — UI/UX
+
+**Objetivo**: mejorar la experiencia visual y de interacción del dashboard, tras cinco fases centradas en funcionalidad. Sin alcance cerrado de antemano — se documenta de forma incremental a medida que se identifican e implementan mejoras concretas, a diferencia de las fases anteriores (que partían de un objetivo ya delimitado en `docs/PROJECT_SPECIFICATION.md`).
+
+Tareas:
+
+- [ ] A definir progresivamente.
+
+**DoD**: a definir.
+
+---
+
+## Fase 9 — Distribución
 
 **Objetivo**: instalar y ejecutar la herramienta como paquete npm.
 
@@ -214,4 +226,4 @@ Tareas:
 - [ ] Paquete npm ejecutable (`npx worktrees-manager`)
 - [ ] Instalación global (`npm i -g`)
 
-**DoD**: a definir al cerrar Fase 7.
+**DoD**: a definir al cerrar Fase 8.
