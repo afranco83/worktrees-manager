@@ -15,6 +15,7 @@ const LINUX_TERMINAL_CANDIDATES: Array<{ command: string; args: (path: string) =
   { command: "xfce4-terminal", args: (path) => [`--working-directory=${path}`] },
   { command: "alacritty", args: (path) => ["--working-directory", path] },
   { command: "kitty", args: (path) => ["--directory", path] },
+  { command: "ghostty", args: (path) => [`--working-directory=${path}`] },
   { command: "xterm", args: () => [] },
 ];
 
@@ -83,11 +84,14 @@ export function terminalPresets(platform: NodeJS.Platform): Array<{
   name: string;
   command: string;
 }> {
+  // Ghostty no tiene build oficial de Windows (macOS/Linux únicamente) — no
+  // se incluye en esa lista, ver https://ghostty.org.
   if (platform === "darwin") {
     return [
       { name: "Terminal", command: "open -a Terminal {path}" },
       { name: "iTerm2", command: "open -a iTerm {path}" },
       { name: "Warp", command: "open -a Warp {path}" },
+      { name: "Ghostty", command: "open -a Ghostty {path}" },
       { name: "Alacritty", command: "open -a Alacritty {path}" },
       { name: "kitty", command: "open -a kitty {path}" },
     ];
@@ -104,6 +108,7 @@ export function terminalPresets(platform: NodeJS.Platform): Array<{
     { name: "GNOME Terminal", command: "gnome-terminal --working-directory={path}" },
     { name: "Konsole", command: "konsole --workdir {path}" },
     { name: "XFCE Terminal", command: "xfce4-terminal --working-directory={path}" },
+    { name: "Ghostty", command: "ghostty --working-directory={path}" },
     { name: "Alacritty", command: "alacritty --working-directory {path}" },
     { name: "kitty", command: "kitty --directory {path}" },
     { name: "xterm", command: "cd {path} && xterm" },

@@ -207,13 +207,22 @@ describe("terminalPresets", () => {
   it("should list common macOS terminals", () => {
     const names = terminalPresets("darwin").map((preset) => preset.name);
 
-    expect(names).toEqual(expect.arrayContaining(["Terminal", "iTerm2", "Warp"]));
+    expect(names).toEqual(expect.arrayContaining(["Terminal", "iTerm2", "Warp", "Ghostty"]));
   });
 
   it("should list common Linux terminals", () => {
     const names = terminalPresets("linux").map((preset) => preset.name);
 
-    expect(names).toEqual(expect.arrayContaining(["GNOME Terminal", "Konsole", "xterm"]));
+    expect(names).toEqual(
+      expect.arrayContaining(["GNOME Terminal", "Konsole", "xterm", "Ghostty"]),
+    );
+  });
+
+  // Ghostty no tiene build de Windows (ver comentario junto a `terminalPresets`).
+  it("should not list Ghostty on Windows", () => {
+    const names = terminalPresets("win32").map((preset) => preset.name);
+
+    expect(names).not.toContain("Ghostty");
   });
 
   it("should list common Windows terminals", () => {
@@ -242,7 +251,7 @@ describe("terminalPresets", () => {
 describe("terminalPresets and the Linux auto-detect fallback", () => {
   // Regresión del hallazgo de code-review: Alacritty y kitty eran seleccionables
   // como preset en Ajustes pero nunca se probaban en el fallback automático.
-  it.each(["alacritty", "kitty"])(
+  it.each(["alacritty", "kitty", "ghostty"])(
     "should auto-detect %s as a fallback, matching its entry in terminalPresets",
     async (command) => {
       const launcher = buildLauncher({ platform: "linux", commandExists: (c) => c === command });
