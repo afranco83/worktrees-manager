@@ -54,6 +54,23 @@ export const updateWorktreeFormSchema = z.object({
 
 export type UpdateWorktreeFormValues = z.infer<typeof updateWorktreeFormSchema>;
 
+export const PULL_REQUEST_STATES = ["open", "closed", "merged"] as const;
+export type PullRequestState = (typeof PULL_REQUEST_STATES)[number];
+
+export const pullRequestSchema = z.object({
+  number: z.number().int(),
+  state: z.enum(PULL_REQUEST_STATES),
+  url: z.string(),
+});
+
+export type PullRequestInfo = z.infer<typeof pullRequestSchema>;
+
+export const updateWorktreePrNumberFormSchema = z.object({
+  prNumber: z.string().regex(/^\d*$/, "Indica solo el número de la PR"),
+});
+
+export type UpdateWorktreePrNumberFormValues = z.infer<typeof updateWorktreePrNumberFormSchema>;
+
 export const worktreeBaseSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("default") }),
   z.object({ type: z.literal("current") }),

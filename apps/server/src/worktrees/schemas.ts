@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PULL_REQUEST_STATES } from "./github-cli.js";
+
 export const WORKTREE_PROCESS_STATUSES = ["stopped", "starting", "running", "error"] as const;
 export type WorktreeProcessStatus = (typeof WORKTREE_PROCESS_STATUSES)[number];
 
@@ -57,6 +59,20 @@ export const updateWorktreeSchema = z.object({
 });
 
 export type UpdateWorktreeInput = z.infer<typeof updateWorktreeSchema>;
+
+export const pullRequestSchema = z.object({
+  number: z.number().int(),
+  state: z.enum(PULL_REQUEST_STATES),
+  url: z.string(),
+});
+
+export type PullRequestInfo = z.infer<typeof pullRequestSchema>;
+
+export const updateWorktreePrNumberSchema = z.object({
+  prNumber: z.number().int().positive().nullable(),
+});
+
+export type UpdateWorktreePrNumberInput = z.infer<typeof updateWorktreePrNumberSchema>;
 
 const worktreeBaseSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("default") }),

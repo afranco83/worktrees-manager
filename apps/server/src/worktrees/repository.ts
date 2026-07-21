@@ -163,6 +163,22 @@ export function updateWorktreeDevCommandOverride(
   return { ...existing, devCommandOverride };
 }
 
+export function updateWorktreePrNumber(
+  db: Database.Database,
+  id: string,
+  prNumber: number | null,
+): Worktree {
+  const existing = getWorktreeById(db, id);
+
+  if (!existing) {
+    throw new NotFoundError(`No existe un worktree con id ${id}`);
+  }
+
+  db.prepare("UPDATE worktrees SET pr_number = ? WHERE id = ?").run(prNumber, id);
+
+  return { ...existing, prNumber };
+}
+
 export function updateWorktreeProcessState(
   db: Database.Database,
   id: string,

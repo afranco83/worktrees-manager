@@ -4,10 +4,12 @@ import { apiRequest } from "@/lib/api-client";
 import {
   logEntrySchema,
   projectGitInfoSchema,
+  pullRequestSchema,
   worktreeSchema,
   type CreateWorktreeFormValues,
   type LogEntry,
   type ProjectGitInfo,
+  type PullRequestInfo,
   type Worktree,
 } from "../schemas";
 
@@ -69,4 +71,23 @@ export async function updateWorktreeDevCommandOverride({
 
 export async function fetchWorktreeLogs(id: string): Promise<LogEntry[]> {
   return z.array(logEntrySchema).parse(await apiRequest(`/api/worktrees/${id}/logs`));
+}
+
+export async function fetchWorktreePullRequest(id: string): Promise<PullRequestInfo | null> {
+  return pullRequestSchema.nullable().parse(await apiRequest(`/api/worktrees/${id}/pull-request`));
+}
+
+export async function updateWorktreePrNumber({
+  id,
+  prNumber,
+}: {
+  id: string;
+  prNumber: number | null;
+}): Promise<PullRequestInfo | null> {
+  return pullRequestSchema.nullable().parse(
+    await apiRequest(`/api/worktrees/${id}/pull-request`, {
+      method: "PATCH",
+      body: JSON.stringify({ prNumber }),
+    }),
+  );
 }
