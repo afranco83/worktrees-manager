@@ -3,7 +3,12 @@ import { z } from "zod";
 
 import type { Project } from "@/features/projects/schemas";
 import type { AppSettings, TerminalOption } from "@/features/settings/schemas";
-import type { LogEntry, ProjectGitInfo, Worktree } from "@/features/worktrees/schemas";
+import type {
+  LogEntry,
+  ProjectGitInfo,
+  PullRequestInfo,
+  Worktree,
+} from "@/features/worktrees/schemas";
 
 const createProjectRequestSchema = z.object({
   localPath: z.string(),
@@ -22,6 +27,10 @@ const updateProjectRequestSchema = z
 
 const updateWorktreeRequestSchema = z.object({
   devCommandOverride: z.string().nullable(),
+});
+
+const updateWorktreePrNumberRequestSchema = z.object({
+  prNumber: z.number().int().positive().nullable(),
 });
 
 const updateSettingsRequestSchema = z
@@ -79,13 +88,22 @@ const DEFAULT_GIT_INFO: ProjectGitInfo = {
 export let worktreesStore: Record<string, Worktree[]> = {};
 export let gitInfoStore: Record<string, ProjectGitInfo> = {};
 export let logEntriesStore: Record<string, LogEntry[]> = {};
+export let pullRequestByWorktreeId: Record<string, PullRequestInfo | null> = {};
 let nextWorktreePort = 4100;
 
 export function resetWorktreesStore(): void {
   worktreesStore = {};
   gitInfoStore = {};
   logEntriesStore = {};
+  pullRequestByWorktreeId = {};
   nextWorktreePort = 4100;
+}
+
+export function setWorktreePullRequest(
+  worktreeId: string,
+  pullRequest: PullRequestInfo | null,
+): void {
+  pullRequestByWorktreeId = { ...pullRequestByWorktreeId, [worktreeId]: pullRequest };
 }
 
 export function setProjectGitInfo(projectId: string, gitInfo: ProjectGitInfo): void {
@@ -367,6 +385,50 @@ export const handlers = [
     const id = requirePathParam(params.id);
 
     return HttpResponse.json(logEntriesStore[id] ?? []);
+  }),
+
+  http.get("/api/worktrees/:id/pull-request", ({ params }) => {
+    const id = requirePathParam(params.id);
+
+    return HttpResponse.json(pullRequestByWorktreeId[id] ?? null);
+  }),
+
+  http.patch("/api/worktrees/:id/pull-request", async ({ params, request }) => {
+    const id = requirePathParam(params.id);
+    const body = updateWorktreePrNumberRequestSchema.parse(await request.json());
+    const entry = findWorktreeEntry(id);
+
+    if (!entry) {
+      return HttpResponse.json(
+        { error: "Not Found", message: "Worktree no encontrado", statusCode: 404 },
+        { status: 404 },
+      );
+    }
+
+    const updatedWorktree: Worktree = { ...entry.worktree, prNumber: body.prNumber };
+    worktreesStore = {
+      ...worktreesStore,
+      [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>
+        worktree.id === id ? updatedWorktree : worktree,
+      ),
+    };
+
+    // Fixture simple: si el test ya fijó una PR concreta con
+    // `setWorktreePullRequest`, se respeta (permite probar estados
+    // abierta/cerrada/mergeada); si no, se sintetiza una PR "abierta" con ese
+    // número, igual de plausible que lo que devolvería `gh pr view` real.
+    const resolved: PullRequestInfo | null =
+      body.prNumber == null
+        ? null
+        : (pullRequestByWorktreeId[id] ?? {
+            number: body.prNumber,
+            state: "open",
+            url: `https://github.com/example/repo/pull/${body.prNumber}`,
+          });
+
+    pullRequestByWorktreeId = { ...pullRequestByWorktreeId, [id]: resolved };
+
+    return HttpResponse.json(resolved);
   }),
 
   http.get("/api/settings", () => HttpResponse.json(settingsStore)),

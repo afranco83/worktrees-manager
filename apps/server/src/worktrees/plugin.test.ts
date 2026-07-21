@@ -5,12 +5,13 @@ import { join } from "node:path";
 
 import Database from "better-sqlite3";
 import type { FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../app.js";
 import { runMigrations } from "../db/migrate.js";
 import { projectSchema } from "../projects/schemas.js";
 import { buildCreateProjectInput } from "../projects/test-fixtures.js";
+import type { GitHubCli } from "./github-cli.js";
 
 function initGitRepo(repoPath: string): void {
   execFileSync("git", ["init"], { cwd: repoPath, stdio: "ignore" });
@@ -845,6 +846,122 @@ describe("worktrees plugin", () => {
         app.inject({ method: "POST", url: `/api/worktrees/${missingId}/start` }),
         app.inject({ method: "POST", url: `/api/worktrees/${missingId}/stop` }),
         app.inject({ method: "GET", url: `/api/worktrees/${missingId}/logs` }),
+      ]);
+
+      expect(responses.every((response) => response.statusCode === 404)).toBe(true);
+    });
+  });
+
+  describe("pull requests", () => {
+    // `gh` no puede ejercitarse de forma determinista en CI (necesita red +
+    // sesión autenticada + un repo real de GitHub) — se inyecta un
+    // `GitHubCli` fake, mismo patrón que `TerminalLauncher` en
+    // `terminal.test.ts`. Reconstruye `app` con el fake, reutilizando el
+    // mismo `db`/`createProject()`/`repoPaths` del resto de la suite.
+    let viewPullRequest: GitHubCli["viewPullRequest"] & ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      viewPullRequest = vi.fn<GitHubCli["viewPullRequest"]>().mockResolvedValue(null);
+      app = buildApp(db, { logger: false, githubCli: { viewPullRequest } });
+    });
+
+    async function createWorktreeForPr(branch: string) {
+      const project = await createProject();
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/worktrees`,
+        payload: { newBranch: branch, base: { type: "default" } },
+      });
+
+      return created.json();
+    }
+
+    it("should resolve the pull request by branch name when there is no manual override", async () => {
+      const worktree = await createWorktreeForPr("feature-pr");
+      const pullRequest = {
+        number: 6,
+        state: "merged",
+        url: "https://github.com/afranco83/worktrees-manager/pull/6",
+      };
+      viewPullRequest.mockResolvedValue(pullRequest);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/worktrees/${worktree.id}/pull-request`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(pullRequest);
+      expect(viewPullRequest).toHaveBeenCalledWith(worktree.path, "feature-pr");
+    });
+
+    it("should return null when there is no pull request associated", async () => {
+      const worktree = await createWorktreeForPr("feature-no-pr");
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/worktrees/${worktree.id}/pull-request`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toBeNull();
+    });
+
+    it("should resolve by pull request number instead of branch once a manual override is set", async () => {
+      const worktree = await createWorktreeForPr("feature-override");
+      const pullRequest = {
+        number: 5,
+        state: "merged",
+        url: "https://github.com/afranco83/worktrees-manager/pull/5",
+      };
+      viewPullRequest.mockResolvedValue(pullRequest);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/worktrees/${worktree.id}/pull-request`,
+        payload: { prNumber: 5 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(pullRequest);
+      expect(viewPullRequest).toHaveBeenLastCalledWith(worktree.path, "5");
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/worktrees/${worktree.id}/pull-request`,
+      });
+
+      expect(viewPullRequest).toHaveBeenLastCalledWith(worktree.path, "5");
+      expect(getResponse.json()).toEqual(pullRequest);
+    });
+
+    it("should clear the manual override and fall back to resolving by branch name", async () => {
+      const worktree = await createWorktreeForPr("feature-clear-override");
+      await app.inject({
+        method: "PATCH",
+        url: `/api/worktrees/${worktree.id}/pull-request`,
+        payload: { prNumber: 5 },
+      });
+
+      await app.inject({
+        method: "PATCH",
+        url: `/api/worktrees/${worktree.id}/pull-request`,
+        payload: { prNumber: null },
+      });
+
+      expect(viewPullRequest).toHaveBeenLastCalledWith(worktree.path, "feature-clear-override");
+    });
+
+    it("should return 404 for both routes when the worktree does not exist", async () => {
+      const missingId = "00000000-0000-4000-8000-000000000000";
+
+      const responses = await Promise.all([
+        app.inject({ method: "GET", url: `/api/worktrees/${missingId}/pull-request` }),
+        app.inject({
+          method: "PATCH",
+          url: `/api/worktrees/${missingId}/pull-request`,
+          payload: { prNumber: 5 },
+        }),
       ]);
 
       expect(responses.every((response) => response.statusCode === 404)).toBe(true);

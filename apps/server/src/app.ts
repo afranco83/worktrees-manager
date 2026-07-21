@@ -31,6 +31,7 @@ import {
 import { filesystemPlugin } from "./filesystem/plugin.js";
 import { projectsPlugin } from "./projects/plugin.js";
 import { settingsPlugin } from "./settings/plugin.js";
+import { systemGitHubCli, type GitHubCli } from "./worktrees/github-cli.js";
 import { pruneAllWorktreeLogs } from "./worktrees/log-repository.js";
 import {
   createProcessManager,
@@ -45,6 +46,7 @@ declare module "fastify" {
     db: Database.Database;
     io: Server;
     processManager: ProcessManager;
+    githubCli: GitHubCli;
   }
 }
 
@@ -64,7 +66,10 @@ function sendErrorResponse({
   reply.code(statusCode).send({ error, message, statusCode });
 }
 
-export function buildApp(db: Database.Database, options?: { logger?: boolean }) {
+export function buildApp(
+  db: Database.Database,
+  options?: { logger?: boolean; githubCli?: GitHubCli },
+) {
   const app = Fastify({ logger: options?.logger ?? true }).withTypeProvider<ZodTypeProvider>();
 
   // Al arrancar no hay forma de recuperar un proceso hijo real de una
@@ -83,6 +88,7 @@ export function buildApp(db: Database.Database, options?: { logger?: boolean }) 
   const processManager = createProcessManager({ db, io });
   app.decorate("io", io);
   app.decorate("processManager", processManager);
+  app.decorate("githubCli", options?.githubCli ?? systemGitHubCli);
 
   io.on("connection", (socket) => {
     app.log.info({ socketId: socket.id }, "cliente conectado por WebSocket");

@@ -33,6 +33,7 @@ import {
   listUsedPorts,
   listWorktreesByProject,
   updateWorktreeDevCommandOverride,
+  updateWorktreePrNumber,
 } from "./repository.js";
 import {
   createWorktreeSchema,
@@ -41,6 +42,8 @@ import {
   logEntrySchema,
   projectGitInfoSchema,
   projectIdParamsSchema,
+  pullRequestSchema,
+  updateWorktreePrNumberSchema,
   updateWorktreeSchema,
   worktreeIdParamsSchema,
   worktreeSchema,
@@ -420,6 +423,43 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
       const worktree = requireWorktree(fastify.db, request.params.id);
 
       return listRecentLogEntries(fastify.db, worktree.id, request.query.limit);
+    },
+  );
+
+  // Fuera de la cadena de enriquecimiento de detectedPorts/gitStatus a
+  // propósito: `gh pr view` es una llamada de red a la API de GitHub, no una
+  // comprobación local — endpoints propios, refrescados por el frontend a un
+  // ritmo mucho más lento (ver ADR-0013), nunca en el poll de 5s del listado.
+  fastify.get(
+    "/worktrees/:id/pull-request",
+    {
+      schema: {
+        params: worktreeIdParamsSchema,
+        response: { 200: pullRequestSchema.nullable() },
+      },
+    },
+    async (request) => {
+      const worktree = requireWorktree(fastify.db, request.params.id);
+      const ref = worktree.prNumber != null ? String(worktree.prNumber) : worktree.branch;
+
+      return fastify.githubCli.viewPullRequest(worktree.path, ref);
+    },
+  );
+
+  fastify.patch(
+    "/worktrees/:id/pull-request",
+    {
+      schema: {
+        params: worktreeIdParamsSchema,
+        body: updateWorktreePrNumberSchema,
+        response: { 200: pullRequestSchema.nullable() },
+      },
+    },
+    async (request) => {
+      const updated = updateWorktreePrNumber(fastify.db, request.params.id, request.body.prNumber);
+      const ref = updated.prNumber != null ? String(updated.prNumber) : updated.branch;
+
+      return fastify.githubCli.viewPullRequest(updated.path, ref);
     },
   );
 };

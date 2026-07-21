@@ -54,6 +54,29 @@ export const updateWorktreeFormSchema = z.object({
 
 export type UpdateWorktreeFormValues = z.infer<typeof updateWorktreeFormSchema>;
 
+export const PULL_REQUEST_STATES = ["open", "closed", "merged"] as const;
+export type PullRequestState = (typeof PULL_REQUEST_STATES)[number];
+
+export const pullRequestSchema = z.object({
+  number: z.number().int(),
+  state: z.enum(PULL_REQUEST_STATES),
+  url: z.string(),
+});
+
+export type PullRequestInfo = z.infer<typeof pullRequestSchema>;
+
+export const updateWorktreePrNumberFormSchema = z.object({
+  // El backend exige un número de PR positivo (`z.number().int().positive()`,
+  // GitHub nunca numera una PR como 0) — se refleja aquí para no depender del
+  // 400 del servidor ante ese caso concreto.
+  prNumber: z
+    .string()
+    .regex(/^\d*$/, "Indica solo el número de la PR")
+    .refine((value) => value === "" || Number(value) > 0, "El número de PR debe ser mayor que 0"),
+});
+
+export type UpdateWorktreePrNumberFormValues = z.infer<typeof updateWorktreePrNumberFormSchema>;
+
 export const worktreeBaseSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("default") }),
   z.object({ type: z.literal("current") }),

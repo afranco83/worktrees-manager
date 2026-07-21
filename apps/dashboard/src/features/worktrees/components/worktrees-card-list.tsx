@@ -1,4 +1,12 @@
-import { Play, ScrollText, SlidersHorizontal, Square, Terminal, Trash2 } from "lucide-react";
+import {
+  GitPullRequest,
+  Play,
+  ScrollText,
+  SlidersHorizontal,
+  Square,
+  Terminal,
+  Trash2,
+} from "lucide-react";
 import { useState, type ComponentProps } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,16 +23,19 @@ import { IconButton } from "@/components/ui/icon-button";
 import { useOpenWorktreeTerminal } from "../api/use-open-worktree-terminal";
 import { useStartWorktree } from "../api/use-start-worktree";
 import { useStopWorktree } from "../api/use-stop-worktree";
+import { useWorktreePullRequest } from "../api/use-worktree-pull-request";
 import { stripAnsiCodes } from "../lib/strip-ansi-codes";
 import type {
   DetectedPort,
   GitStatusSummary,
   LogEntry,
+  PullRequestState,
   Worktree,
   WorktreeProcessStatus,
   WorktreeProcessStep,
 } from "../schemas";
 import { EditWorktreeDevCommandDialog } from "./edit-worktree-dev-command-dialog";
+import { EditWorktreePrDialog } from "./edit-worktree-pr-dialog";
 import { WorktreeLogsDialog } from "./worktree-logs-dialog";
 
 const PROCESS_STATUS_LABELS: Record<WorktreeProcessStatus, string> = {
@@ -47,6 +58,21 @@ const PROCESS_STATUS_BADGE_VARIANTS: Record<
 const PROCESS_STEP_LABELS: Record<WorktreeProcessStep, string> = {
   "installing-dependencies": "Instalando dependencias…",
   "starting-dev-command": "Arrancando comando de dev…",
+};
+
+const PULL_REQUEST_STATE_LABELS: Record<PullRequestState, string> = {
+  open: "Abierta",
+  closed: "Cerrada",
+  merged: "Mergeada",
+};
+
+const PULL_REQUEST_STATE_BADGE_VARIANTS: Record<
+  PullRequestState,
+  ComponentProps<typeof Badge>["variant"]
+> = {
+  open: "default",
+  closed: "destructive",
+  merged: "secondary",
 };
 
 function PortLink({ port, label }: { port: number; label?: string | null }) {
@@ -104,6 +130,26 @@ function GitStatusBadge({ gitStatus }: { gitStatus: GitStatusSummary | null }) {
   );
 }
 
+// Query propia (no un campo del `Worktree`, ver ADR-0013): `gh pr view` es una
+// llamada de red a GitHub, así que se refresca a un ritmo mucho más lento que
+// el resto de la card (60s) y de forma desacoplada del poll de 5s de
+// `useWorktrees`. Sin PR asociada, silencio — mismo criterio que `GitStatusBadge`.
+function PullRequestBadge({ worktreeId }: { worktreeId: string }) {
+  const { data: pullRequest } = useWorktreePullRequest(worktreeId);
+
+  if (pullRequest == null) {
+    return null;
+  }
+
+  return (
+    <a href={pullRequest.url} target="_blank" rel="noopener noreferrer">
+      <Badge variant={PULL_REQUEST_STATE_BADGE_VARIANTS[pullRequest.state]}>
+        PR #{pullRequest.number} · {PULL_REQUEST_STATE_LABELS[pullRequest.state]}
+      </Badge>
+    </a>
+  );
+}
+
 function WorktreeCard({
   worktree,
   step,
@@ -120,6 +166,7 @@ function WorktreeCard({
   const stopWorktree = useStopWorktree();
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isEditDevCommandOpen, setIsEditDevCommandOpen] = useState(false);
+  const [isEditPrOpen, setIsEditPrOpen] = useState(false);
 
   const isTransitioning = worktree.processStatus === "starting";
 
@@ -156,6 +203,11 @@ function WorktreeCard({
             onClick={() => openTerminal.mutate(worktree.id)}
           />
           <IconButton
+            icon={GitPullRequest}
+            label="Asociar PR"
+            onClick={() => setIsEditPrOpen(true)}
+          />
+          <IconButton
             icon={Trash2}
             label="Borrar worktree"
             variant="destructive"
@@ -172,6 +224,7 @@ function WorktreeCard({
             <Badge variant="outline">Comando personalizado</Badge>
           )}
           <GitStatusBadge gitStatus={worktree.gitStatus} />
+          <PullRequestBadge worktreeId={worktree.id} />
           <WorktreePorts worktree={worktree} />
         </div>
         {isTransitioning && step != null && (
@@ -204,6 +257,11 @@ function WorktreeCard({
         worktree={worktree}
         open={isEditDevCommandOpen}
         onOpenChange={setIsEditDevCommandOpen}
+      />
+      <EditWorktreePrDialog
+        worktree={worktree}
+        open={isEditPrOpen}
+        onOpenChange={setIsEditPrOpen}
       />
     </Card>
   );

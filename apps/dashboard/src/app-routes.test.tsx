@@ -366,6 +366,35 @@ describe("app routes", () => {
     });
   });
 
+  it("should associate a pull request manually and show its badge without waiting for the poll", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    expect(screen.queryByText(/^PR #/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Asociar PR" }));
+    await user.type(screen.getByLabelText("Número de PR"), "7");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(await screen.findByText("PR #7 · Abierta")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Asociar PR" }));
+    await user.clear(screen.getByLabelText("Número de PR"));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/^PR #/)).not.toBeInTheDocument();
+    });
+  });
+
   it("should show the log history when opening the logs dialog for a worktree", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 
