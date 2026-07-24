@@ -591,6 +591,87 @@ describe("app routes", () => {
     });
   });
 
+  it("should navigate to the worktree detail page and show its info", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+
+    expect(await screen.findByRole("heading", { name: "feature-a" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", {
+        name: new RegExp(EXISTING_PROJECT.name),
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Parado")).toBeInTheDocument();
+    expect(screen.getByText("Heredado del proyecto")).toBeInTheDocument();
+    expect(screen.getByText("Sin Pull Request asociada.")).toBeInTheDocument();
+  });
+
+  it("should start and stop the worktree's dev environment from the detail page", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    await screen.findByRole("heading", { name: "feature-a" });
+
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
+
+    expect(await screen.findByRole("button", { name: "Parar" })).toBeInTheDocument();
+    expect(screen.getByText("Corriendo")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Parar" }));
+
+    expect(await screen.findByRole("button", { name: "Arrancar" })).toBeInTheDocument();
+    expect(screen.getByText("Parado")).toBeInTheDocument();
+  });
+
+  it("should delete the worktree from the detail page and navigate back to the project", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Todavía no hay worktrees creados.");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    await screen.findByRole("heading", { name: "feature-a" });
+
+    await user.click(screen.getByRole("button", { name: "Borrar worktree" }));
+    await screen.findByText("Borrar worktree: feature-a");
+    await user.click(screen.getByRole("button", { name: "Borrar" }));
+
+    // Vuelve a la página del proyecto (el worktree ya no existe, no tendría
+    // sentido quedarse en su propia vista de detalle).
+    expect(await screen.findByRole("heading", { name: EXISTING_PROJECT.name })).toBeInTheDocument();
+    expect(screen.getByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+  });
+
+  it("should show a not-found message for a worktree id that does not exist", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+    renderApp(`/projects/${EXISTING_PROJECT.id}/worktrees/does-not-exist`);
+
+    expect(await screen.findByText("No se ha encontrado el worktree.")).toBeInTheDocument();
+  });
+
   it("should update the terminal preference and port range from the settings dialog", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 

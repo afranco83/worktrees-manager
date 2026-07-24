@@ -1,4 +1,5 @@
 import {
+  Eye,
   GitPullRequest,
   Loader2,
   MoreHorizontal,
@@ -9,7 +10,8 @@ import {
   Terminal as TerminalIcon,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,16 +30,17 @@ import { useOpenWorktreeTerminal } from "../api/use-open-worktree-terminal";
 import { useStartWorktree } from "../api/use-start-worktree";
 import { useStopWorktree } from "../api/use-stop-worktree";
 import { useWorktreePullRequest } from "../api/use-worktree-pull-request";
-import type {
-  GitStatusSummary,
-  PullRequestState,
-  Worktree,
-  WorktreeProcessStatus,
-  WorktreeProcessStep,
-} from "../schemas";
+import { useIsWorktreeStarting } from "../hooks/use-is-worktree-starting";
+import {
+  PROCESS_STEP_LABELS,
+  PULL_REQUEST_STATE_BADGE_VARIANTS,
+  PULL_REQUEST_STATE_LABELS,
+} from "../lib/worktree-labels";
+import type { Worktree, WorktreeProcessStatus, WorktreeProcessStep } from "../schemas";
 import { EditWorktreeDevCommandDialog } from "./edit-worktree-dev-command-dialog";
 import { EditWorktreePrDialog } from "./edit-worktree-pr-dialog";
 import { WorktreeLogsDialog } from "./worktree-logs-dialog";
+import { GitStatusBadge, WorktreePorts } from "./worktree-status-badges";
 
 // `running`/`stopped`/`starting` ya se deducen del propio botón de
 // arranque/parada (icono, color y loader mientras arranca o para) — mostrar
@@ -52,40 +55,21 @@ const PROCESS_STATUS_DOT_COLORS: Partial<Record<WorktreeProcessStatus, string>> 
   error: "bg-destructive",
 };
 
-const PROCESS_STEP_LABELS: Record<WorktreeProcessStep, string> = {
-  "installing-dependencies": "Instalando dependencias…",
-  "starting-dev-command": "Arrancando comando de dev…",
-};
-
-// Los tres botones de la barra inferior de la card comparten forma (el borde
+// Los botones de la barra inferior de la card comparten forma (el borde
 // redondeado de las esquinas lo resuelve el `overflow-hidden` del propio
 // `Card`, no hace falta redondear aquí cada botón).
-const FOOTER_BUTTON_CLASSNAME = "h-11 w-full gap-1.5 rounded-none";
+const FOOTER_BUTTON_CLASSNAME = "h-11 w-full gap-1 rounded-none px-1.5 text-[0.8rem]";
 
-// El backend marca `processStatus: "running"` en cuanto el proceso hace
-// `spawn` con éxito, sin esperar a que el `devCommand` esté realmente
-// escuchando (ver `process-manager.ts`) — para un monorepo con varias apps
-// eso puede tardar varios segundos más. `detectedPorts` sí es una señal
-// positiva de que algo real está arriba (se rellena al parsear un puerto en
-// los logs, ver ADR-0007/0008), así que se usa como proxy de "listo de
-// verdad". Un timeout evita esperar para siempre en un `devCommand` que no
-// imprime ninguna línea reconocible (p. ej. sin `localhost:<puerto>`).
-const FIRST_PORT_DETECTION_TIMEOUT_MS = 10_000;
-
-const PULL_REQUEST_STATE_LABELS: Record<PullRequestState, string> = {
-  open: "Abierta",
-  closed: "Cerrada",
-  merged: "Mergeada",
-};
-
-const PULL_REQUEST_STATE_BADGE_VARIANTS: Record<
-  PullRequestState,
-  ComponentProps<typeof Badge>["variant"]
-> = {
-  open: "default",
-  closed: "destructive",
-  merged: "secondary",
-};
+// Con 4 acciones en una sola fila, el hueco disponible por botón depende del
+// ancho real de la card, no del viewport — la propia card puede ocupar 1, 2 o
+// 3 columnas del grid del listado según el tamaño de pantalla. Se usa una
+// container query sobre el propio `CardFooter` (`@container/card-footer`, ver
+// `card.tsx`) en vez de un breakpoint de página, para que el texto se oculte
+// justo antes de que el hueco se quede apretado, sea cual sea el motivo por
+// el que la card es estrecha. El nombre accesible del botón no depende de
+// este texto (cada uno lleva su propio `aria-label`, ver más abajo), así que
+// ocultarlo aquí no deja el botón sin nombre para lectores de pantalla.
+const FOOTER_BUTTON_LABEL_CLASSNAME = "hidden @sm/card-footer:inline";
 
 function ProcessStatusIndicator({ status }: { status: WorktreeProcessStatus }) {
   const label = PROCESS_STATUS_LABELS[status];
@@ -102,57 +86,6 @@ function ProcessStatusIndicator({ status }: { status: WorktreeProcessStatus }) {
       />
       {label}
     </span>
-  );
-}
-
-function PortLink({ port, label }: { port: number; label?: string | null }) {
-  return (
-    <a
-      href={`http://localhost:${port}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline-offset-2 hover:underline"
-    >
-      {label ? `${label}: ${port}` : `Puerto ${port}`}
-    </a>
-  );
-}
-
-// `worktree.port` es solo el valor pasado como PORT al devCommand, no una
-// garantía de qué acabará escuchando: un monorepo con varias apps (turbo,
-// workspaces...) puede levantar puertos completamente distintos, y ni
-// siquiera una app única tiene por qué respetar esa variable. Mismo criterio
-// de silencio que `GitStatusBadge`/`PullRequestBadge`: nada de puertos hasta
-// tener el dato real (anunciado en los logs, ver ADR-0007/ADR-0008), en vez
-// de una suposición que además puede cambiar en cuanto arranca de verdad.
-function WorktreePorts({ worktree }: { worktree: Worktree }) {
-  if (worktree.detectedPorts.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
-      {worktree.detectedPorts.map(({ port, label }) => (
-        <PortLink key={port} port={port} label={label} />
-      ))}
-    </div>
-  );
-}
-
-// Aviso de seguridad ante el borrado, no un resumen de ficheros (ver
-// ADR-0012): silencio cuando no hay nada pendiente o cuando `gitStatus` es
-// `null` (no se pudo determinar, p. ej. el directorio ya no existe en
-// disco) — mostrar "sin cambios" en ese caso afirmaría algo que no se sabe.
-function GitStatusBadge({ gitStatus }: { gitStatus: GitStatusSummary | null }) {
-  if (gitStatus === null) {
-    return null;
-  }
-
-  return (
-    <>
-      {gitStatus.hasUncommittedChanges && <Badge variant="secondary">Cambios sin commitear</Badge>}
-      {gitStatus.hasUnpushedCommits && <Badge variant="secondary">Commits sin subir</Badge>}
-    </>
   );
 }
 
@@ -185,6 +118,7 @@ function WorktreeCard({
   step: WorktreeProcessStep | null;
   onDelete: (worktree: Worktree) => void;
 }) {
+  const navigate = useNavigate();
   const openTerminal = useOpenWorktreeTerminal();
   const startWorktree = useStartWorktree();
   const stopWorktree = useStopWorktree();
@@ -192,45 +126,8 @@ function WorktreeCard({
   const [isEditDevCommandOpen, setIsEditDevCommandOpen] = useState(false);
   const [isEditPrOpen, setIsEditPrOpen] = useState(false);
 
-  // "stopping" no existe como estado propio (ver `WORKTREE_PROCESS_STATUSES`):
-  // parar espera a que el proceso termine de verdad antes de resolver la
-  // mutación, así que su propio `isPending` ya es la señal exacta de "en
-  // curso". Arrancar sí tiene un estado real e independiente de quién lo
-  // dispara (otra pestaña, por ejemplo) — se combinan ambas señales.
   const isTransitioning = worktree.processStatus === "starting";
-
-  // "running" llega muy pronto (ver `FIRST_PORT_DETECTION_TIMEOUT_MS` más
-  // arriba) — el efecto solo arranca la espera justo después de una
-  // transición a "running" propia (nunca para un worktree que ya estaba
-  // corriendo al montar la card). El AND con el estado actual de más abajo
-  // hace innecesario resetear el estado a mano en el resto de casos (sin
-  // puertos aún no implica seguir esperando si ya se paró, por ejemplo), así
-  // que el cuerpo del efecto no llama a `setState` fuera del timeout.
-  const [isWaitingSinceStart, setIsWaitingSinceStart] = useState(false);
-  const previousProcessStatusRef = useRef(worktree.processStatus);
-
-  useEffect(() => {
-    const justStartedRunning =
-      previousProcessStatusRef.current !== "running" && worktree.processStatus === "running";
-    previousProcessStatusRef.current = worktree.processStatus;
-
-    if (!justStartedRunning || worktree.detectedPorts.length > 0) {
-      return;
-    }
-
-    setIsWaitingSinceStart(true);
-    const timeoutId = setTimeout(
-      () => setIsWaitingSinceStart(false),
-      FIRST_PORT_DETECTION_TIMEOUT_MS,
-    );
-    return () => clearTimeout(timeoutId);
-  }, [worktree.processStatus, worktree.detectedPorts.length]);
-
-  const isAwaitingFirstPort =
-    isWaitingSinceStart &&
-    worktree.processStatus === "running" &&
-    worktree.detectedPorts.length === 0;
-  const isStarting = isTransitioning || startWorktree.isPending || isAwaitingFirstPort;
+  const isStarting = useIsWorktreeStarting(worktree, startWorktree.isPending);
 
   return (
     <Card>
@@ -277,47 +174,66 @@ function WorktreeCard({
           </p>
         )}
       </CardContent>
-      <CardFooter className="grid grid-cols-3 divide-x divide-border bg-muted/30 p-0">
+      <CardFooter className="grid grid-cols-4 divide-x divide-border bg-muted/30 p-0">
         {isStarting ? (
           // Antes que el `processStatus === "running"` de abajo a propósito:
           // el backend marca "running" en cuanto el proceso hace spawn (ver
           // ADR-0007/`process-manager.ts`), y ese evento de socket llega casi
           // siempre antes de que esta mutación se resuelva — sin esta
           // prioridad, el botón de parar sustituiría al loader de inmediato.
-          <Button variant="ghost" disabled className={cn(FOOTER_BUTTON_CLASSNAME, "text-success")}>
-            <Loader2 className="animate-spin" /> Arrancando…
+          <Button
+            variant="ghost"
+            disabled
+            aria-label="Arrancando…"
+            className={cn(FOOTER_BUTTON_CLASSNAME, "text-success")}
+          >
+            <Loader2 className="animate-spin" />{" "}
+            <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Arrancando…</span>
           </Button>
         ) : worktree.processStatus === "running" ? (
           <Button
             variant="ghost"
             disabled={stopWorktree.isPending}
             onClick={() => stopWorktree.mutate(worktree.id)}
+            aria-label={stopWorktree.isPending ? "Parando…" : "Parar"}
             className={cn(FOOTER_BUTTON_CLASSNAME, "text-destructive hover:bg-destructive/10")}
           >
             {stopWorktree.isPending ? <Loader2 className="animate-spin" /> : <Square />}
-            {stopWorktree.isPending ? "Parando…" : "Parar"}
+            <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>
+              {stopWorktree.isPending ? "Parando…" : "Parar"}
+            </span>
           </Button>
         ) : (
           <Button
             variant="ghost"
             onClick={() => startWorktree.mutate(worktree.id)}
+            aria-label="Arrancar"
             className={cn(FOOTER_BUTTON_CLASSNAME, "text-success hover:bg-success/10")}
           >
-            <Play /> Arrancar
+            <Play /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Arrancar</span>
           </Button>
         )}
         <Button
           variant="ghost"
-          onClick={() => setIsLogsOpen(true)}
+          onClick={() => navigate(`/projects/${worktree.projectId}/worktrees/${worktree.id}`)}
+          aria-label="Detalle"
           className={FOOTER_BUTTON_CLASSNAME}
         >
-          <ScrollText /> Logs
+          <Eye /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Detalle</span>
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => setIsLogsOpen(true)}
+          aria-label="Logs"
+          className={FOOTER_BUTTON_CLASSNAME}
+        >
+          <ScrollText /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Logs</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" className={FOOTER_BUTTON_CLASSNAME}>
-                <MoreHorizontal /> Más
+              <Button variant="ghost" aria-label="Más" className={FOOTER_BUTTON_CLASSNAME}>
+                <MoreHorizontal /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Más</span>
               </Button>
             }
           />
