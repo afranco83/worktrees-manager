@@ -2,7 +2,9 @@ import { Plus, Settings } from "lucide-react";
 import { useState } from "react";
 import { NavLink } from "react-router";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { IconButton } from "@/components/ui/icon-button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SettingsDialog } from "@/features/settings/components/settings-dialog";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,7 @@ export function ProjectsSidebar() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Proyectos</h1>
         <div className="flex gap-1">
+          <ThemeToggle />
           <IconButton icon={Plus} label="Añadir proyecto" onClick={() => setIsCreateOpen(true)} />
           <IconButton icon={Settings} label="Ajustes" onClick={() => setIsSettingsOpen(true)} />
         </div>
@@ -36,21 +39,26 @@ export function ProjectsSidebar() {
 
       <nav className="flex flex-col gap-1 overflow-y-auto">
         {projects?.map((project) => (
-          <NavLink
-            key={project.id}
-            to={`/projects/${project.id}`}
-            className={({ isActive }) =>
-              cn(
-                "rounded-md px-3 py-2 text-sm hover:bg-sidebar-accent",
-                isActive && "bg-sidebar-accent font-medium",
-              )
-            }
-          >
-            <span className="block truncate">{project.name}</span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {project.localPath}
-            </span>
-          </NavLink>
+          <Tooltip key={project.id}>
+            <TooltipTrigger
+              render={
+                <NavLink
+                  to={`/projects/${project.id}`}
+                  className={({ isActive }) =>
+                    cn(
+                      "block truncate rounded-md px-3 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-sidebar-primary/15 font-medium text-sidebar-primary hover:bg-sidebar-primary/20"
+                        : "hover:bg-sidebar-primary/10",
+                    )
+                  }
+                >
+                  {project.name}
+                </NavLink>
+              }
+            />
+            <TooltipContent side="right">{project.localPath}</TooltipContent>
+          </Tooltip>
         ))}
       </nav>
 

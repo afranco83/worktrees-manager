@@ -68,7 +68,7 @@ export function WorktreeLogsToolbar({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => void handleCopy()}>
+      <Button size="sm" onClick={() => void handleCopy()}>
         {justCopied ? (
           <>
             <Check /> Copiado
@@ -79,10 +79,10 @@ export function WorktreeLogsToolbar({
           </>
         )}
       </Button>
-      <Button variant="outline" size="sm" onClick={handleDownload}>
+      <Button size="sm" onClick={handleDownload}>
         <Download /> Descargar
       </Button>
-      <Button variant="outline" size="sm" onClick={clearEntries}>
+      <Button size="sm" onClick={clearEntries}>
         <Eraser /> Limpiar
       </Button>
     </>

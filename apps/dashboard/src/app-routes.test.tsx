@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { projectSchema, type Project } from "@/features/projects/schemas";
+import { getStoredTheme } from "@/lib/theme";
 import {
   FAKE_HOME,
   resetProjectsStore,
@@ -59,6 +60,7 @@ describe("app routes", () => {
     resetProjectsStore();
     resetWorktreesStore();
     resetSettingsStore();
+    document.documentElement.classList.remove("dark");
   });
 
   it("should show an empty state at / when no project has been registered yet", async () => {
@@ -91,6 +93,58 @@ describe("app routes", () => {
     await user.click(screen.getByRole("link", { name: new RegExp(secondProject.name) }));
 
     expect(await screen.findByRole("heading", { name: secondProject.name })).toBeInTheDocument();
+  });
+
+  it("should only show a project's local path as a tooltip in the sidebar, not as always-visible text", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    const link = await screen.findByRole("link", { name: EXISTING_PROJECT.name });
+
+    expect(screen.queryByText(EXISTING_PROJECT.localPath)).not.toBeInTheDocument();
+
+    await user.hover(link);
+
+    expect(await screen.findByText(EXISTING_PROJECT.localPath)).toBeInTheDocument();
+  });
+
+  it("should toggle dark mode from the sidebar and persist the preference", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    // El entorno de test no trae un `localStorage` real (de ahí el aviso
+    // "localStorage is not available" que se ve en toda la suite) — se
+    // stubea uno en memoria para poder comprobar que la preferencia
+    // realmente se persiste, no solo que cambia la clase del documento.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    });
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByRole("heading", { name: EXISTING_PROJECT.name });
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(getStoredTheme()).toBe("light");
+
+    await user.click(screen.getByRole("button", { name: "Activar modo oscuro" }));
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(getStoredTheme()).toBe("dark");
+    expect(screen.getByRole("button", { name: "Activar modo claro" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Activar modo claro" }));
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(getStoredTheme()).toBe("light");
+
+    vi.unstubAllGlobals();
   });
 
   it("should add a project from the sidebar and navigate to its detail page", async () => {

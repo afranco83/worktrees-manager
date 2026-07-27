@@ -57,8 +57,12 @@ const PROCESS_STATUS_DOT_COLORS: Partial<Record<WorktreeProcessStatus, string>> 
 
 // Los botones de la barra inferior de la card comparten forma (el borde
 // redondeado de las esquinas lo resuelve el `overflow-hidden` del propio
-// `Card`, no hace falta redondear aquí cada botón).
-const FOOTER_BUTTON_CLASSNAME = "h-11 w-full gap-1 rounded-none px-1.5 text-[0.8rem]";
+// `Card`, no hace falta redondear aquí cada botón). `bg-clip-border` pisa el
+// `bg-clip-padding` de base de `Button`: si no, el fondo no llega a pintar
+// bajo el borde transparente de cada botón y deja un hueco de 1-2px entre
+// botones contiguos por el que se cuela el fondo del `CardFooter`.
+const FOOTER_BUTTON_CLASSNAME =
+  "h-11 w-full gap-1 rounded-none bg-clip-border px-1.5 text-[0.8rem]";
 
 // Con 4 acciones en una sola fila, el hueco disponible por botón depende del
 // ancho real de la card, no del viewport — la propia card puede ocupar 1, 2 o
@@ -174,7 +178,7 @@ function WorktreeCard({
           </p>
         )}
       </CardContent>
-      <CardFooter className="grid grid-cols-4 divide-x divide-border bg-muted/30 p-0">
+      <CardFooter className="grid grid-cols-4 divide-x divide-border bg-card p-0">
         {isStarting ? (
           // Antes que el `processStatus === "running"` de abajo a propósito:
           // el backend marca "running" en cuanto el proceso hace spawn (ver
@@ -182,10 +186,10 @@ function WorktreeCard({
           // siempre antes de que esta mutación se resuelva — sin esta
           // prioridad, el botón de parar sustituiría al loader de inmediato.
           <Button
-            variant="ghost"
+            variant="default"
             disabled
             aria-label="Arrancando…"
-            className={cn(FOOTER_BUTTON_CLASSNAME, "text-success")}
+            className={FOOTER_BUTTON_CLASSNAME}
           >
             <Loader2 className="animate-spin" />{" "}
             <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Arrancando…</span>
@@ -196,7 +200,7 @@ function WorktreeCard({
             disabled={stopWorktree.isPending}
             onClick={() => stopWorktree.mutate(worktree.id)}
             aria-label={stopWorktree.isPending ? "Parando…" : "Parar"}
-            className={cn(FOOTER_BUTTON_CLASSNAME, "text-destructive hover:bg-destructive/10")}
+            className={cn(FOOTER_BUTTON_CLASSNAME, "bg-chart-1 text-black hover:bg-chart-1/80")}
           >
             {stopWorktree.isPending ? <Loader2 className="animate-spin" /> : <Square />}
             <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>
@@ -205,16 +209,16 @@ function WorktreeCard({
           </Button>
         ) : (
           <Button
-            variant="ghost"
+            variant="default"
             onClick={() => startWorktree.mutate(worktree.id)}
             aria-label="Arrancar"
-            className={cn(FOOTER_BUTTON_CLASSNAME, "text-success hover:bg-success/10")}
+            className={FOOTER_BUTTON_CLASSNAME}
           >
             <Play /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Arrancar</span>
           </Button>
         )}
         <Button
-          variant="ghost"
+          variant="default"
           onClick={() => navigate(`/projects/${worktree.projectId}/worktrees/${worktree.id}`)}
           aria-label="Detalle"
           className={FOOTER_BUTTON_CLASSNAME}
@@ -222,7 +226,7 @@ function WorktreeCard({
           <Eye /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Detalle</span>
         </Button>
         <Button
-          variant="ghost"
+          variant="default"
           onClick={() => setIsLogsOpen(true)}
           aria-label="Logs"
           className={FOOTER_BUTTON_CLASSNAME}
@@ -232,7 +236,7 @@ function WorktreeCard({
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" aria-label="Más" className={FOOTER_BUTTON_CLASSNAME}>
+              <Button variant="default" aria-label="Más" className={FOOTER_BUTTON_CLASSNAME}>
                 <MoreHorizontal /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Más</span>
               </Button>
             }

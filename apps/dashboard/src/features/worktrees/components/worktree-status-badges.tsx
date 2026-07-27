@@ -47,8 +47,12 @@ export function GitStatusBadge({ gitStatus }: { gitStatus: GitStatusSummary | nu
 
   return (
     <>
-      {gitStatus.hasUncommittedChanges && <Badge variant="secondary">Cambios sin commitear</Badge>}
-      {gitStatus.hasUnpushedCommits && <Badge variant="secondary">Commits sin subir</Badge>}
+      {gitStatus.hasUncommittedChanges && (
+        <Badge className="bg-chart-1 text-black">Cambios sin commitear</Badge>
+      )}
+      {gitStatus.hasUnpushedCommits && (
+        <Badge className="bg-chart-1 text-black">Commits sin subir</Badge>
+      )}
     </>
   );
 }

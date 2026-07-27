@@ -130,12 +130,12 @@ export function WorktreeDetailPage() {
           <CardDescription>{worktree.path}</CardDescription>
           <CardAction className="flex items-center gap-2">
             {isStarting ? (
-              <Button disabled variant="success">
+              <Button disabled>
                 <Loader2 className="animate-spin" /> Arrancando…
               </Button>
             ) : worktree.processStatus === "running" ? (
               <Button
-                variant="destructive"
+                className="bg-chart-1 text-black hover:bg-chart-1/80"
                 disabled={stopWorktree.isPending}
                 onClick={() => stopWorktree.mutate(worktree.id)}
               >
@@ -143,7 +143,7 @@ export function WorktreeDetailPage() {
                 {stopWorktree.isPending ? "Parando…" : "Parar"}
               </Button>
             ) : (
-              <Button variant="success" onClick={() => startWorktree.mutate(worktree.id)}>
+              <Button onClick={() => startWorktree.mutate(worktree.id)}>
                 <Play /> Arrancar
               </Button>
             )}
