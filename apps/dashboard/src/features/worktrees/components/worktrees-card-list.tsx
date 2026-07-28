@@ -293,7 +293,7 @@ export function WorktreesCardList({
       <button
         type="button"
         onClick={onCreate}
-        className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+        className="flex min-h-[50vh] w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
       >
         <GitBranchPlus className="size-10" />
         <span className="text-sm font-medium">Crea tu primer worktree</span>
