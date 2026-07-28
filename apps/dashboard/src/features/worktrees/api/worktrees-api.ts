@@ -36,8 +36,8 @@ export async function createWorktree({
   );
 }
 
-export async function deleteWorktree({ id, force }: { id: string; force: boolean }): Promise<void> {
-  await apiRequest(`/api/worktrees/${id}?force=${force}`, { method: "DELETE" });
+export async function deleteWorktree({ id }: { id: string }): Promise<void> {
+  await apiRequest(`/api/worktrees/${id}`, { method: "DELETE" });
 }
 
 export async function openWorktreeTerminal(id: string): Promise<void> {

@@ -3,7 +3,12 @@ import type { FastifyBaseLogger } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { CurrentBranchNotFoundError, GitWorktreeOperationError, NotFoundError } from "../errors.js";
+import {
+  CurrentBranchNotFoundError,
+  GitWorktreeOperationError,
+  NotFoundError,
+  WorktreeProcessNotRunningError,
+} from "../errors.js";
 import { getProjectById } from "../projects/repository.js";
 import { getSettings } from "../settings/repository.js";
 import { copyGitignoredEnvFiles } from "./env-files.js";
@@ -37,7 +42,6 @@ import {
 } from "./repository.js";
 import {
   createWorktreeSchema,
-  deleteWorktreeQuerySchema,
   listLogEntriesQuerySchema,
   logEntrySchema,
   projectGitInfoSchema,
@@ -335,21 +339,31 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
   fastify.delete(
     "/worktrees/:id",
-    {
-      schema: {
-        params: worktreeIdParamsSchema,
-        querystring: deleteWorktreeQuerySchema,
-      },
-    },
+    { schema: { params: worktreeIdParamsSchema } },
     async (request, reply) => {
       const worktree = requireWorktree(fastify.db, request.params.id);
       const project = requireProject(fastify.db, worktree.projectId);
 
       await withProjectLock(project.id, async () => {
+        // Sin bypass por `force`: un worktree con cambios sin commitear no se
+        // puede borrar hasta que el propio usuario limpie el árbol — `git
+        // worktree remove` (sin `--force`) ya rechaza esta operación por su
+        // cuenta y ese rechazo se propaga tal cual (409, `WorktreeHasUncommittedChangesError`).
+        // Si el worktree está corriendo su entorno de dev, se para primero
+        // para no dejar el proceso huérfano (sin worktree ni registro al que
+        // asociarlo) una vez borrado el directorio.
+        if (worktree.processStatus === "running" || worktree.processStatus === "starting") {
+          await fastify.processManager.stop(worktree.id).catch((error: unknown) => {
+            if (!(error instanceof WorktreeProcessNotRunningError)) {
+              throw error;
+            }
+          });
+        }
+
         await removeWorktree({
           repoPath: project.localPath,
           worktreePath: worktree.path,
-          force: request.query.force,
+          force: false,
         });
 
         deleteWorktree(fastify.db, worktree.id);

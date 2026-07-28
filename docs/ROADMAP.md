@@ -213,6 +213,7 @@ Tareas:
 
 - [x] Tema de color (paleta, dark/light mode) y pulido de acciones/badges en card y vista de detalle de worktree.
 - [x] Adaptación responsive a móvil/tablet: sidebar como panel deslizante por debajo de `lg`, grids de listado por container query en vez de breakpoints de viewport ([ADR-0014](./adr/0014-sidebar-responsive-y-grids-por-container-query.md)).
+- [x] Borrado de worktree: bloqueo sin excepción con cambios sin commitear (ya no se puede forzar) y parada automática del entorno de dev si está corriendo ([ADR-0015](./adr/0015-bloqueo-de-borrado-con-cambios-sin-commitear.md)).
 - [ ] Resto a definir progresivamente.
 
 **DoD**: a definir.

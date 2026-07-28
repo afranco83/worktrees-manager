@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ApiError } from "@/lib/api-client";
 
 import { useDeleteWorktree } from "../api/use-delete-worktree";
 import type { Worktree } from "../schemas";
@@ -17,14 +16,16 @@ export function DeleteWorktreeStep({
   onDeleted: () => void;
 }) {
   const deleteWorktree = useDeleteWorktree(projectId);
-  const hasUncommittedChanges =
-    deleteWorktree.isError &&
-    deleteWorktree.error instanceof ApiError &&
-    deleteWorktree.error.status === 409;
+  // Bloqueo real, no solo aviso (a diferencia de `hasUnpushedCommits` más
+  // abajo): sin forzado posible, el usuario tiene que limpiar el árbol a su
+  // criterio (commitear, descartar o guardar en un stash) antes de poder
+  // borrar — `git worktree remove` sin `--force` ya rechaza esto por su
+  // cuenta en el backend, este check solo evita el viaje de ida y vuelta.
+  const hasUncommittedChanges = worktree.gitStatus?.hasUncommittedChanges === true;
 
-  async function handleConfirm(force: boolean): Promise<void> {
+  async function handleConfirm(): Promise<void> {
     try {
-      await deleteWorktree.mutateAsync({ id: worktree.id, force });
+      await deleteWorktree.mutateAsync({ id: worktree.id });
     } catch {
       return;
     }
@@ -44,6 +45,12 @@ export function DeleteWorktreeStep({
       <p className="rounded-md bg-muted px-3 py-2 font-mono text-xs break-all text-muted-foreground">
         {worktree.path}
       </p>
+      {hasUncommittedChanges && (
+        <p className="text-sm text-destructive" role="alert">
+          Este worktree tiene cambios sin commitear. Límpialos (commitea, descarta o guárdalos en un
+          stash) para poder borrarlo.
+        </p>
+      )}
       {worktree.gitStatus?.hasUnpushedCommits && (
         <p className="text-sm text-muted-foreground" role="alert">
           Esta rama tiene commits sin subir a ningún remoto conocido — solo existen en este worktree
@@ -59,23 +66,13 @@ export function DeleteWorktreeStep({
         <Button variant="outline" onClick={onCancel} disabled={deleteWorktree.isPending}>
           Cancelar
         </Button>
-        {hasUncommittedChanges ? (
-          <Button
-            variant="destructive"
-            onClick={() => void handleConfirm(true)}
-            disabled={deleteWorktree.isPending}
-          >
-            Forzar borrado
-          </Button>
-        ) : (
-          <Button
-            variant="destructive"
-            onClick={() => void handleConfirm(false)}
-            disabled={deleteWorktree.isPending}
-          >
-            Borrar
-          </Button>
-        )}
+        <Button
+          variant="destructive"
+          onClick={() => void handleConfirm()}
+          disabled={deleteWorktree.isPending || hasUncommittedChanges}
+        >
+          Borrar
+        </Button>
       </DialogFooter>
     </>
   );

@@ -621,7 +621,7 @@ describe("app routes", () => {
     });
   });
 
-  it("should offer to force-delete a worktree with uncommitted changes", async () => {
+  it("should refuse to delete a worktree with uncommitted changes, with no way to force it", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 
     const user = userEvent.setup();
@@ -635,14 +635,17 @@ describe("app routes", () => {
 
     await openMoreActionsMenu(user);
     await user.click(screen.getByRole("menuitem", { name: "Borrar" }));
-    await user.click(screen.getByRole("button", { name: "Borrar" }));
 
-    const forceButton = await screen.findByRole("button", { name: "Forzar borrado" });
-    await user.click(forceButton);
+    expect(
+      await screen.findByText(/tiene cambios sin commitear/, { exact: false }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Borrar" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Forzar borrado" })).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText("Crea tu primer worktree")).toBeInTheDocument();
-    });
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // El worktree sigue existiendo: no ha habido forma de colar el borrado.
+    expect(screen.getByText("feature-dirty")).toBeInTheDocument();
   });
 
   it("should navigate to the worktree detail page and show its info", async () => {

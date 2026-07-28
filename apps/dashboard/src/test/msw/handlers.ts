@@ -242,7 +242,12 @@ export const handlers = [
       createdAt: new Date().toISOString(),
       devCommandOverride: null,
       detectedPorts: [],
-      gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: false },
+      // Convención ya usada por el resto de la suite: una rama con "dirty" en
+      // el nombre simula un worktree con cambios sin commitear.
+      gitStatus: {
+        hasUncommittedChanges: body.newBranch.includes("dirty"),
+        hasUnpushedCommits: false,
+      },
     };
     nextWorktreePort += 1;
 
@@ -274,9 +279,8 @@ export const handlers = [
     return HttpResponse.json(updated);
   }),
 
-  http.delete("/api/worktrees/:id", ({ params, request }) => {
+  http.delete("/api/worktrees/:id", ({ params }) => {
     const id = requirePathParam(params.id);
-    const force = new URL(request.url).searchParams.get("force") === "true";
 
     for (const [projectId, worktrees] of Object.entries(worktreesStore)) {
       const worktree = worktrees.find((candidate) => candidate.id === id);
@@ -285,7 +289,10 @@ export const handlers = [
         continue;
       }
 
-      if (worktree.branch.includes("dirty") && !force) {
+      // Sin bypass: coherente con que el backend real ya no acepta ningún
+      // parámetro para forzar el borrado de un worktree con cambios sin
+      // commitear.
+      if (worktree.branch.includes("dirty")) {
         return HttpResponse.json(
           {
             error: "Conflict",

@@ -20,3 +20,4 @@ A diferencia de otros repos propios sobre el mismo modelo documental, aquí no h
 | [0012](./0012-estado-git-sin-commitear.md)                       | Aviso de seguridad ante el borrado: cambios sin commitear + commits sin subir (commit base persistido, sin remoto conocido = todo sin subir)        |
 | [0013](./0013-integracion-pull-requests.md)                      | Integración con Pull Requests: endpoint dedicado + `GitHubCli` inyectable, desacoplado del poll de 5s, sin detalle de checks de CI                  |
 | [0014](./0014-sidebar-responsive-y-grids-por-container-query.md) | Sidebar responsive vía panel deslizante (`Sheet`) por debajo de `lg` + grids de listado por container query en vez de breakpoints de viewport       |
+| [0015](./0015-bloqueo-de-borrado-con-cambios-sin-commitear.md)   | Borrar un worktree con cambios sin commitear pasa de "forzable" a bloqueado sin excepción; borrar uno corriendo lo para primero                     |
