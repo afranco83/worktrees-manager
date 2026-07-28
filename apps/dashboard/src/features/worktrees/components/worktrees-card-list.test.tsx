@@ -64,6 +64,7 @@ function renderList(worktrees: Worktree[]): {
             worktrees={currentWorktrees}
             stepByWorktreeId={{}}
             onDelete={vi.fn()}
+            onCreate={vi.fn()}
           />
         </MemoryRouter>
       </QueryClientProvider>

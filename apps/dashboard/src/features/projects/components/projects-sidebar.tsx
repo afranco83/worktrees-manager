@@ -21,9 +21,9 @@ export function ProjectsSidebar() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Proyectos</h1>
         <div className="flex gap-1">
-          <ThemeToggle />
           <IconButton icon={Plus} label="Añadir proyecto" onClick={() => setIsCreateOpen(true)} />
           <IconButton icon={Settings} label="Ajustes" onClick={() => setIsSettingsOpen(true)} />
+          <ThemeToggle />
         </div>
       </div>
 

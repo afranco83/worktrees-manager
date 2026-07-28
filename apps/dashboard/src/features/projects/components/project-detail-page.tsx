@@ -91,6 +91,7 @@ export function ProjectDetailPage() {
           <IconButton
             icon={GitBranchPlus}
             label="Crear worktree"
+            size="icon-lg"
             onClick={() => setDialogState({ type: "create-worktree" })}
           />
         </div>
@@ -108,6 +109,7 @@ export function ProjectDetailPage() {
             worktrees={worktrees.data}
             stepByWorktreeId={worktrees.stepByWorktreeId}
             onDelete={(worktree) => setDialogState({ type: "delete-worktree", worktree })}
+            onCreate={() => setDialogState({ type: "create-worktree" })}
           />
         )}
       </div>

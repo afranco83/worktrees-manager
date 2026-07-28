@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { useProjects } from "@/features/projects/api/use-projects";
-import { cn } from "@/lib/utils";
 
 import { useOpenWorktreeTerminal } from "../api/use-open-worktree-terminal";
 import { useStartWorktree } from "../api/use-start-worktree";
@@ -37,30 +36,11 @@ import {
   PULL_REQUEST_STATE_BADGE_VARIANTS,
   PULL_REQUEST_STATE_LABELS,
 } from "../lib/worktree-labels";
-import type { WorktreeProcessStatus } from "../schemas";
 import { DeleteWorktreeDialog } from "./delete-worktree-dialog";
 import { EditWorktreeDevCommandDialog } from "./edit-worktree-dev-command-dialog";
 import { EditWorktreePrDialog } from "./edit-worktree-pr-dialog";
-import { GitStatusBadge, WorktreePorts } from "./worktree-status-badges";
+import { GitStatusBadge } from "./worktree-status-badges";
 import { WorktreeLogEntries, WorktreeLogsToolbar } from "./worktree-logs-panel";
-
-// A diferencia de la card compacta del listado (donde running/stopped ya se
-// deducen del propio botón de arranque/parada y repetirlo sería redundante),
-// aquí el estado vive en su propia fila de información, separada de la
-// acción — no hay redundancia que evitar, así que se etiquetan los cuatro.
-const PROCESS_STATUS_LABELS: Record<WorktreeProcessStatus, string> = {
-  stopped: "Parado",
-  starting: "Arrancando…",
-  running: "Corriendo",
-  error: "Error",
-};
-
-const PROCESS_STATUS_DOT_COLORS: Record<WorktreeProcessStatus, string> = {
-  stopped: "bg-muted-foreground",
-  starting: "bg-muted-foreground",
-  running: "bg-success",
-  error: "bg-destructive",
-};
 
 export function WorktreeDetailPage() {
   const { projectId, worktreeId } = useParams<{ projectId: string; worktreeId: string }>();
@@ -124,8 +104,9 @@ export function WorktreeDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle level={2} className="text-xl">
+          <CardTitle level={2} className="flex items-center gap-2 text-xl">
             {worktree.branch}
+            <GitStatusBadge gitStatus={worktree.gitStatus} />
           </CardTitle>
           <CardDescription>{worktree.path}</CardDescription>
           <CardAction className="flex items-center gap-2">
@@ -161,63 +142,18 @@ export function WorktreeDetailPage() {
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">Estado</dt>
-              <dd className="flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "size-2 rounded-full",
-                    PROCESS_STATUS_DOT_COLORS[worktree.processStatus],
-                  )}
-                />
-                {PROCESS_STATUS_LABELS[worktree.processStatus]}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Puertos</dt>
-              <dd>
-                <WorktreePorts worktree={worktree} />
-                {worktree.detectedPorts.length === 0 && (
-                  <span className="text-muted-foreground">
-                    {worktree.processStatus === "running"
-                      ? "Todavía sin detectar"
-                      : "Se detectan al arrancar"}
-                  </span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="flex items-center gap-1 text-muted-foreground">
-                Comando de arranque
-                <IconButton
-                  icon={Pencil}
-                  label="Editar comando de arranque"
-                  size="icon-xs"
-                  variant="ghost"
-                  onClick={() => setIsEditDevCommandOpen(true)}
-                />
-              </dt>
-              <dd>
-                {worktree.devCommandOverride ?? (
-                  <span className="text-muted-foreground">Heredado del proyecto</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Cambios locales</dt>
-              <dd className="flex flex-wrap items-center gap-2">
-                {worktree.gitStatus == null ? (
-                  <span className="text-muted-foreground">No se ha podido determinar</span>
-                ) : worktree.gitStatus.hasUncommittedChanges ||
-                  worktree.gitStatus.hasUnpushedCommits ? (
-                  <GitStatusBadge gitStatus={worktree.gitStatus} />
-                ) : (
-                  <span className="text-muted-foreground">Sin cambios pendientes</span>
-                )}
-              </dd>
-            </div>
+          <dl className="text-sm">
+            <dt className="flex items-center gap-1 text-muted-foreground">
+              Comando de arranque
+              <IconButton
+                icon={Pencil}
+                label="Editar comando de arranque"
+                size="icon-xs"
+                variant="ghost"
+                onClick={() => setIsEditDevCommandOpen(true)}
+              />
+            </dt>
+            <dd>{worktree.devCommandOverride ?? project?.devCommand}</dd>
           </dl>
 
           {worktree.processStatus === "starting" && (
@@ -241,6 +177,43 @@ export function WorktreeDetailPage() {
           {stopWorktree.isError && (
             <p className="text-sm text-destructive" role="alert">
               {stopWorktree.error.message}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle level={3}>Puertos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {worktree.detectedPorts.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {worktree.detectedPorts.map(({ port, label }) => (
+                <a
+                  key={port}
+                  href={`http://localhost:${port}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  {label ? (
+                    <>
+                      <span className="font-medium">{label}</span>
+                      <span className="text-muted-foreground">:{port}</span>
+                    </>
+                  ) : (
+                    `Puerto ${port}`
+                  )}
+                  <ExternalLink className="size-3.5 text-muted-foreground" />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {worktree.processStatus === "running"
+                ? "Todavía sin detectar"
+                : "Se detectan al arrancar"}
             </p>
           )}
         </CardContent>

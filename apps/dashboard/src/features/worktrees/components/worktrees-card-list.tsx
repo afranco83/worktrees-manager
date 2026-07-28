@@ -1,5 +1,6 @@
 import {
   Eye,
+  GitBranchPlus,
   GitPullRequest,
   Loader2,
   MoreHorizontal,
@@ -136,16 +137,19 @@ function WorktreeCard({
   return (
     <Card>
       <CardHeader>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <CardTitle level={4} className="w-fit truncate">
-                {worktree.branch}
-              </CardTitle>
-            }
-          />
-          <TooltipContent>{worktree.path}</TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <CardTitle level={4} className="w-fit truncate">
+                  {worktree.branch}
+                </CardTitle>
+              }
+            />
+            <TooltipContent>{worktree.path}</TooltipContent>
+          </Tooltip>
+          <GitStatusBadge gitStatus={worktree.gitStatus} />
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -156,7 +160,6 @@ function WorktreeCard({
           {worktree.devCommandOverride != null && (
             <Badge variant="outline">Comando personalizado</Badge>
           )}
-          <GitStatusBadge gitStatus={worktree.gitStatus} />
           <PullRequestBadge worktreeId={worktree.id} />
         </div>
         {isTransitioning && step != null && (
@@ -278,13 +281,24 @@ export function WorktreesCardList({
   worktrees,
   stepByWorktreeId,
   onDelete,
+  onCreate,
 }: {
   worktrees: Worktree[];
   stepByWorktreeId: Record<string, WorktreeProcessStep | null>;
   onDelete: (worktree: Worktree) => void;
+  onCreate: () => void;
 }) {
   if (worktrees.length === 0) {
-    return <p className="text-sm text-muted-foreground">Todavía no hay worktrees creados.</p>;
+    return (
+      <button
+        type="button"
+        onClick={onCreate}
+        className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+      >
+        <GitBranchPlus className="size-10" />
+        <span className="text-sm font-medium">Crea tu primer worktree</span>
+      </button>
+    );
   }
 
   return (

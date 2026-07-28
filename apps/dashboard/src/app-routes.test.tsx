@@ -337,7 +337,7 @@ describe("app routes", () => {
     resetProjectsStore([EXISTING_PROJECT]);
     renderApp();
 
-    expect(await screen.findByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+    expect(await screen.findByText("Crea tu primer worktree")).toBeInTheDocument();
   });
 
   it("should create a worktree from the default branch and list it", async () => {
@@ -346,7 +346,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
 
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
@@ -361,7 +361,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -379,7 +379,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -402,7 +402,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -436,7 +436,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -467,7 +467,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -487,7 +487,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -530,7 +530,7 @@ describe("app routes", () => {
     try {
       renderApp();
 
-      await screen.findByText("Todavía no hay worktrees creados.");
+      await screen.findByText("Crea tu primer worktree");
       await user.click(screen.getByRole("button", { name: "Crear worktree" }));
       await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
       await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -575,7 +575,7 @@ describe("app routes", () => {
       const user = userEvent.setup();
       renderApp();
 
-      await screen.findByText("Todavía no hay worktrees creados.");
+      await screen.findByText("Crea tu primer worktree");
       await user.click(screen.getByRole("button", { name: "Crear worktree" }));
       await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
       await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -605,7 +605,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -617,7 +617,7 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Borrar" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+      expect(screen.getByText("Crea tu primer worktree")).toBeInTheDocument();
     });
   });
 
@@ -627,7 +627,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-dirty");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -641,7 +641,7 @@ describe("app routes", () => {
     await user.click(forceButton);
 
     await waitFor(() => {
-      expect(screen.getByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+      expect(screen.getByText("Crea tu primer worktree")).toBeInTheDocument();
     });
   });
 
@@ -651,7 +651,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -665,8 +665,7 @@ describe("app routes", () => {
         name: new RegExp(EXISTING_PROJECT.name),
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Parado")).toBeInTheDocument();
-    expect(screen.getByText("Heredado del proyecto")).toBeInTheDocument();
+    expect(screen.getByText(EXISTING_PROJECT.devCommand)).toBeInTheDocument();
     expect(screen.getByText("Sin Pull Request asociada.")).toBeInTheDocument();
   });
 
@@ -676,7 +675,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -687,12 +686,10 @@ describe("app routes", () => {
     await user.click(screen.getByRole("button", { name: "Arrancar" }));
 
     expect(await screen.findByRole("button", { name: "Parar" })).toBeInTheDocument();
-    expect(screen.getByText("Corriendo")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Parar" }));
 
     expect(await screen.findByRole("button", { name: "Arrancar" })).toBeInTheDocument();
-    expect(screen.getByText("Parado")).toBeInTheDocument();
   });
 
   it("should delete the worktree from the detail page and navigate back to the project", async () => {
@@ -701,7 +698,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -716,7 +713,7 @@ describe("app routes", () => {
     // Vuelve a la página del proyecto (el worktree ya no existe, no tendría
     // sentido quedarse en su propia vista de detalle).
     expect(await screen.findByRole("heading", { name: EXISTING_PROJECT.name })).toBeInTheDocument();
-    expect(screen.getByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+    expect(screen.getByText("Crea tu primer worktree")).toBeInTheDocument();
   });
 
   it("should show a not-found message for a worktree id that does not exist", async () => {
