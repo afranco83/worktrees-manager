@@ -33,7 +33,7 @@ export function WorktreeLogsDialog({
         <WorktreeLogEntries {...panel} className="h-[65vh]" />
 
         {panel.entries.length > 0 && (
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row">
             <WorktreeLogsToolbar {...panel} />
           </DialogFooter>
         )}

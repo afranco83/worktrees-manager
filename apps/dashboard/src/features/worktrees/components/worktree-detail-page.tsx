@@ -103,13 +103,15 @@ export function WorktreeDetailPage() {
       </Link>
 
       <Card>
-        <CardHeader>
-          <CardTitle level={2} className="flex items-center gap-2 text-xl">
-            {worktree.branch}
-            <GitStatusBadge gitStatus={worktree.gitStatus} />
-          </CardTitle>
-          <CardDescription>{worktree.path}</CardDescription>
-          <CardAction className="flex items-center gap-2">
+        <CardHeader className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle level={2} className="flex flex-wrap items-center gap-2 text-xl">
+              {worktree.branch}
+              <GitStatusBadge gitStatus={worktree.gitStatus} />
+            </CardTitle>
+            <CardDescription>{worktree.path}</CardDescription>
+          </div>
+          <CardAction className="flex flex-wrap items-center gap-2">
             {isStarting ? (
               <Button disabled>
                 <Loader2 className="animate-spin" /> Arrancando…
@@ -250,9 +252,9 @@ export function WorktreeDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-wrap items-start justify-between gap-2">
           <CardTitle level={3}>Logs</CardTitle>
-          <CardAction className="flex gap-2">
+          <CardAction className="flex flex-wrap gap-2">
             <WorktreeLogsToolbar {...logsPanel} />
           </CardAction>
         </CardHeader>

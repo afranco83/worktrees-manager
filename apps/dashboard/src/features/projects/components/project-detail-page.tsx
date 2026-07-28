@@ -76,11 +76,9 @@ export function ProjectDetailPage() {
           </CardAction>
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">Comando de arranque</dt>
-              <dd>{project.devCommand}</dd>
-            </div>
+          <dl className="text-sm">
+            <dt className="text-muted-foreground">Comando de arranque</dt>
+            <dd>{project.devCommand}</dd>
           </dl>
         </CardContent>
       </Card>

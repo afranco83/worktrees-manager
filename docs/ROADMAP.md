@@ -211,7 +211,9 @@ Tareas:
 
 Tareas:
 
-- [ ] A definir progresivamente.
+- [x] Tema de color (paleta, dark/light mode) y pulido de acciones/badges en card y vista de detalle de worktree.
+- [x] Adaptación responsive a móvil/tablet: sidebar como panel deslizante por debajo de `lg`, grids de listado por container query en vez de breakpoints de viewport ([ADR-0014](./adr/0014-sidebar-responsive-y-grids-por-container-query.md)).
+- [ ] Resto a definir progresivamente.
 
 **DoD**: a definir.
 

@@ -1,9 +1,10 @@
-import { Plus, Settings } from "lucide-react";
+import { Menu, Plus, Settings } from "lucide-react";
 import { useState } from "react";
 import { NavLink } from "react-router";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { IconButton } from "@/components/ui/icon-button";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SettingsDialog } from "@/features/settings/components/settings-dialog";
 import { cn } from "@/lib/utils";
@@ -11,13 +12,17 @@ import { cn } from "@/lib/utils";
 import { useProjects } from "../api/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 
-export function ProjectsSidebar() {
+// Cabecera de acciones + navegación en sí, sin el contenedor (`<aside>`
+// persistente en pantallas grandes, `SheetContent` deslizante en
+// móvil/tablet — ver `ProjectsSidebar`). `onNavigate` cierra el panel
+// deslizante al elegir un proyecto; en el sidebar persistente es un no-op.
+function ProjectsSidebarContent({ onNavigate }: { onNavigate: () => void }) {
   const { data: projects, isLoading, isError, error } = useProjects();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar p-4 text-sidebar-foreground">
+    <>
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Proyectos</h1>
         <div className="flex gap-1">
@@ -44,6 +49,7 @@ export function ProjectsSidebar() {
               render={
                 <NavLink
                   to={`/projects/${project.id}`}
+                  onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
                       "block truncate rounded-md px-3 py-2 text-sm transition-colors",
@@ -64,6 +70,34 @@ export function ProjectsSidebar() {
 
       <CreateProjectDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
       <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
-    </aside>
+    </>
+  );
+}
+
+// Por debajo de `lg` el sidebar persistente (288px) no deja sitio para el
+// contenido — se sustituye por una barra superior con un botón que abre la
+// misma navegación en un panel deslizante (`Sheet`), en vez de un layout
+// paralelo distinto para móvil.
+export function ProjectsSidebar() {
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  return (
+    <>
+      <div className="flex items-center justify-between border-b border-sidebar-border bg-sidebar p-3 text-sidebar-foreground lg:hidden">
+        <IconButton icon={Menu} label="Abrir navegación" onClick={() => setIsMobileNavOpen(true)} />
+        <h1 className="text-base font-semibold">Proyectos</h1>
+        <div className="size-9" aria-hidden="true" />
+      </div>
+
+      <aside className="hidden w-72 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar p-4 text-sidebar-foreground lg:flex">
+        <ProjectsSidebarContent onNavigate={() => {}} />
+      </aside>
+
+      <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+        <SheetContent aria-label="Navegación de proyectos" className="gap-4">
+          <ProjectsSidebarContent onNavigate={() => setIsMobileNavOpen(false)} />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

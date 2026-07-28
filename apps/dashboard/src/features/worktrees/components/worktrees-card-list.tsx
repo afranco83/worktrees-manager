@@ -302,15 +302,22 @@ export function WorktreesCardList({
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-      {worktrees.map((worktree) => (
-        <WorktreeCard
-          key={worktree.id}
-          worktree={worktree}
-          step={stepByWorktreeId[worktree.id] ?? null}
-          onDelete={onDelete}
-        />
-      ))}
+    // Container query, no breakpoint de viewport: el hueco real depende de
+    // si el sidebar está en modo persistente o no (ver `AppLayout`), no del
+    // ancho de la ventana — mismo motivo que `@container/card-footer` en
+    // `card.tsx`. Mismos umbrales que los `md`/`lg` que sustituyen (768px y
+    // 1024px), pero medidos contra el propio contenedor.
+    <div className="@container/worktree-grid">
+      <div className="grid gap-3 @[768px]/worktree-grid:grid-cols-2 @[1024px]/worktree-grid:grid-cols-3">
+        {worktrees.map((worktree) => (
+          <WorktreeCard
+            key={worktree.id}
+            worktree={worktree}
+            step={stepByWorktreeId[worktree.id] ?? null}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
     </div>
   );
 }
