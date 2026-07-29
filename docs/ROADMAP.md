@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 8 — UI/UX, en curso desde el 2026-07-21**; Fase 7 cerrada el 2026-07-21; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Fase 9 — Distribución, pendiente de arrancar**; Fase 8 cerrada el 2026-07-29; Fase 7 cerrada el 2026-07-21; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -205,20 +205,19 @@ Tareas:
 
 ---
 
-## Fase 8 — UI/UX
+## Fase 8 — UI/UX _(cerrada — 2026-07-29)_
 
-**Objetivo**: mejorar la experiencia visual y de interacción del dashboard, tras cinco fases centradas en funcionalidad. Sin alcance cerrado de antemano — se documenta de forma incremental a medida que se identifican e implementan mejoras concretas, a diferencia de las fases anteriores (que partían de un objetivo ya delimitado en `docs/PROJECT_SPECIFICATION.md`).
+**Objetivo**: mejorar la experiencia visual y de interacción del dashboard, tras cinco fases centradas en funcionalidad. Sin alcance cerrado de antemano — se documentó de forma incremental a medida que se identificaron e implementaron mejoras concretas, a diferencia de las fases anteriores (que partían de un objetivo ya delimitado en `docs/PROJECT_SPECIFICATION.md`).
 
 Tareas:
 
 - [x] Tema de color (paleta, dark/light mode) y pulido de acciones/badges en card y vista de detalle de worktree.
 - [x] Adaptación responsive a móvil/tablet: sidebar como panel deslizante por debajo de `lg`, grids de listado por container query en vez de breakpoints de viewport ([ADR-0014](./adr/0014-sidebar-responsive-y-grids-por-container-query.md)).
 - [x] Borrado de worktree: bloqueo sin excepción con cambios sin commitear (ya no se puede forzar) y parada automática del entorno de dev si está corriendo ([ADR-0015](./adr/0015-bloqueo-de-borrado-con-cambios-sin-commitear.md)).
-- [ ] Resto a definir progresivamente.
 
-**DoD**: a definir.
+**DoD**: sin criterio numérico fijado de antemano (alcance abierto) — se da por cumplido con las tres mejoras de arriba implementadas y verificadas; cualquier mejora de UI/UX que surja a partir de ahora se aborda como tarea nueva, no como continuación de esta fase. **Cumplido**, cerrada por decisión explícita del usuario el 2026-07-29 sin tareas adicionales pendientes.
 
-**Mergeada en `main`**: [PR #8](https://github.com/afranco83/worktrees-manager/pull/8) (2026-07-29), 242 tests backend + 67 tests frontend en verde — cubre las tres tareas marcadas arriba (tema de color, responsive y bloqueo de borrado con cambios sin commitear). La fase sigue abierta: quedan mejoras de UI/UX por identificar antes de cerrarla.
+**Mergeada en `main`**: [PR #8](https://github.com/afranco83/worktrees-manager/pull/8) (2026-07-29), 242 tests backend + 67 tests frontend en verde.
 
 ---
 
@@ -231,4 +230,4 @@ Tareas:
 - [ ] Paquete npm ejecutable (`npx worktrees-manager`)
 - [ ] Instalación global (`npm i -g`)
 
-**DoD**: a definir al cerrar Fase 8.
+**DoD**: a definir.
