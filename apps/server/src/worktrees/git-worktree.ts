@@ -22,6 +22,16 @@ const DEFAULT_BRANCH_CANDIDATES = ["main", "master"];
 export const GIT_ENV = { ...process.env, LC_ALL: "C" };
 
 /**
+ * Ningún comando git de este módulo debería tardar más que esto en una
+ * operación local normal — el límite existe para que un proceso git
+ * realmente colgado (p. ej. el propio directorio de trabajo desaparece a
+ * mitad de lectura por un borrado concurrente, visto en la práctica con un
+ * test de integración) rechace la promesa en vez de dejar la petición HTTP
+ * — y el lock que pueda estar sosteniendo — esperando para siempre.
+ */
+export const GIT_COMMAND_TIMEOUT_MS = 15_000;
+
+/**
  * Valida el nombre con el propio git (delega en sus reglas de referencia) antes de
  * usarlo para construir una ruta de filesystem — ver ADR-0003.
  */
@@ -38,6 +48,7 @@ async function localBranchExists(repoPath: string, branch: string): Promise<bool
     await execa("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd: repoPath,
       env: GIT_ENV,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
     });
     return true;
   } catch {
@@ -50,6 +61,7 @@ export async function resolveDefaultBranch(repoPath: string): Promise<string> {
     const { stdout } = await execa("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], {
       cwd: repoPath,
       env: GIT_ENV,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
     });
     const match = /^refs\/remotes\/origin\/(.+)$/.exec(stdout.trim());
 
@@ -82,6 +94,7 @@ export async function getCurrentBranch(repoPath: string): Promise<string | null>
   const { stdout } = await execa("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
     cwd: repoPath,
     env: GIT_ENV,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
   });
   const branch = stdout.trim();
 
@@ -94,7 +107,11 @@ export async function getCurrentBranch(repoPath: string): Promise<string | null>
  * sin tener que resolver `baseRef` por separado (ver ADR-0012).
  */
 export async function resolveHeadCommitSha(repoPath: string): Promise<string> {
-  const { stdout } = await execa("git", ["rev-parse", "HEAD"], { cwd: repoPath, env: GIT_ENV });
+  const { stdout } = await execa("git", ["rev-parse", "HEAD"], {
+    cwd: repoPath,
+    env: GIT_ENV,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
+  });
 
   return stdout.trim();
 }
@@ -103,7 +120,7 @@ export async function listLocalBranches(repoPath: string): Promise<string[]> {
   const { stdout } = await execa(
     "git",
     ["for-each-ref", "--format=%(refname:short)", "refs/heads/"],
-    { cwd: repoPath, env: GIT_ENV },
+    { cwd: repoPath, env: GIT_ENV, timeout: GIT_COMMAND_TIMEOUT_MS },
   );
 
   return stdout
@@ -163,6 +180,7 @@ export async function addWorktree({
     await execa("git", ["worktree", "add", "-b", newBranch, worktreePath, baseRef], {
       cwd: repoPath,
       env: GIT_ENV,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch (error) {
     const stderr = readStderr(error);
@@ -187,7 +205,11 @@ export async function deleteLocalBranch({
   repoPath: string;
   branch: string;
 }): Promise<void> {
-  await execa("git", ["branch", "-D", branch], { cwd: repoPath, env: GIT_ENV });
+  await execa("git", ["branch", "-D", branch], {
+    cwd: repoPath,
+    env: GIT_ENV,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
+  });
 }
 
 export async function removeWorktree({
@@ -204,14 +226,18 @@ export async function removeWorktree({
       ? ["worktree", "remove", "--force", worktreePath]
       : ["worktree", "remove", worktreePath];
 
-    await execa("git", args, { cwd: repoPath, env: GIT_ENV });
+    await execa("git", args, { cwd: repoPath, env: GIT_ENV, timeout: GIT_COMMAND_TIMEOUT_MS });
   } catch (error) {
     const stderr = readStderr(error);
 
     if (/is not a working tree/.test(stderr)) {
       // El directorio ya no existe (borrado a mano fuera de la app): se poda la
       // referencia interna de git y se trata como un borrado exitoso.
-      await execa("git", ["worktree", "prune"], { cwd: repoPath, env: GIT_ENV });
+      await execa("git", ["worktree", "prune"], {
+        cwd: repoPath,
+        env: GIT_ENV,
+        timeout: GIT_COMMAND_TIMEOUT_MS,
+      });
       return;
     }
 

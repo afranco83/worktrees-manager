@@ -345,28 +345,37 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
       const project = requireProject(fastify.db, worktree.projectId);
 
       await withProjectLock(project.id, async () => {
-        // Sin bypass por `force`: un worktree con cambios sin commitear no se
-        // puede borrar hasta que el propio usuario limpie el árbol — `git
-        // worktree remove` (sin `--force`) ya rechaza esta operación por su
-        // cuenta y ese rechazo se propaga tal cual (409, `WorktreeHasUncommittedChangesError`).
-        // Si el worktree está corriendo su entorno de dev, se para primero
-        // para no dejar el proceso huérfano (sin worktree ni registro al que
-        // asociarlo) una vez borrado el directorio.
-        if (worktree.processStatus === "running" || worktree.processStatus === "starting") {
+        // Lock adicional por `worktree.id` (mismo que usa `processManager.start()`
+        // para su propio registro atómico) anidado dentro del de proyecto: sin
+        // él, un arranque concurrente al mismo worktree podría colarse entre
+        // parar y borrar, dejando un proceso vivo que acaba logueando contra
+        // una fila ya eliminada (violación de FK, puede tumbar el servidor
+        // entero) — `processManager.start()` ya comprueba dentro de ese mismo
+        // lock que el worktree sigue existiendo antes de registrarse, así que
+        // ambas operaciones no pueden decidir a la vez sobre el mismo worktree.
+        await withProjectLock(worktree.id, async () => {
+          // Se intenta parar siempre, sin fiarse de `processStatus` (leído
+          // antes de este lock, podría estar desfasado) — un worktree ya
+          // parado simplemente no tiene nada que parar.
           await fastify.processManager.stop(worktree.id).catch((error: unknown) => {
             if (!(error instanceof WorktreeProcessNotRunningError)) {
               throw error;
             }
           });
-        }
 
-        await removeWorktree({
-          repoPath: project.localPath,
-          worktreePath: worktree.path,
-          force: false,
+          // Sin bypass por `force`: un worktree con cambios sin commitear no
+          // se puede borrar hasta que el propio usuario limpie el árbol —
+          // `git worktree remove` (sin `--force`) ya rechaza esta operación
+          // por su cuenta y ese rechazo se propaga tal cual (409,
+          // `WorktreeHasUncommittedChangesError`).
+          await removeWorktree({
+            repoPath: project.localPath,
+            worktreePath: worktree.path,
+            force: false,
+          });
+
+          deleteWorktree(fastify.db, worktree.id);
         });
-
-        deleteWorktree(fastify.db, worktree.id);
       });
 
       reply.code(204).send();

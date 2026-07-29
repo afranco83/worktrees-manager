@@ -593,6 +593,35 @@ describe("worktrees plugin", () => {
     expect(() => process.kill(pid, 0)).toThrow();
   });
 
+  it("should refuse to start a worktree that was deleted after being read but before registering", async () => {
+    const devCommand = writeDevScript("setInterval(() => {}, 1000);");
+    const project = await createProject({ devCommand });
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-start-after-delete", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    mkdirSync(join(worktree.path, "node_modules"));
+
+    // Simula la ventana de carrera: `worktree` es el dato ya leído por un
+    // cliente justo antes de que otro borre el worktree — `processManager`
+    // se llama directamente (saltándose el 404 de nivel de ruta de
+    // `requireWorktree`) para ejercitar la comprobación que hace la propia
+    // sección crítica de `start()`, no la de la ruta.
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/worktrees/${worktree.id}`,
+    });
+    expect(deleteResponse.statusCode).toBe(204);
+
+    await expect(app.processManager.start(worktree, project)).rejects.toThrow(/ya no existe/);
+
+    // Sin proceso huérfano: el registro interno no debe haberse quedado con
+    // nada para un worktree que nunca debió llegar a arrancar.
+    expect(app.processManager.getDetectedPorts(worktree.id)).toEqual([]);
+  });
+
   it("should return 404 when deleting a worktree id that does not exist", async () => {
     const response = await app.inject({
       method: "DELETE",

@@ -1,6 +1,6 @@
 import { execa } from "execa";
 
-import { GIT_ENV } from "./git-worktree.js";
+import { GIT_COMMAND_TIMEOUT_MS, GIT_ENV } from "./git-worktree.js";
 
 export interface GitStatusSummary {
   hasUncommittedChanges: boolean;
@@ -8,7 +8,11 @@ export interface GitStatusSummary {
 }
 
 export async function hasUncommittedChanges(path: string): Promise<boolean> {
-  const { stdout } = await execa("git", ["status", "--porcelain"], { cwd: path, env: GIT_ENV });
+  const { stdout } = await execa("git", ["status", "--porcelain"], {
+    cwd: path,
+    env: GIT_ENV,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
+  });
 
   return stdout.trim() !== "";
 }
@@ -18,6 +22,7 @@ async function remoteBranchExists(path: string, branch: string): Promise<boolean
     await execa("git", ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], {
       cwd: path,
       env: GIT_ENV,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
     });
     return true;
   } catch {
@@ -29,6 +34,7 @@ async function countCommitsAhead(path: string, baseRef: string): Promise<number>
   const { stdout } = await execa("git", ["rev-list", "--count", `${baseRef}..HEAD`], {
     cwd: path,
     env: GIT_ENV,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
   });
 
   return Number.parseInt(stdout.trim(), 10);
