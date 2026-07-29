@@ -223,11 +223,21 @@ Tareas:
 
 ## Fase 9 — Distribución
 
-**Objetivo**: instalar y ejecutar la herramienta como paquete npm.
+**Objetivo**: instalar y ejecutar la herramienta como paquete npm, publicado en el registro público (nombre `worktrees-manager`, libre en npm a fecha de definición de esta fase).
 
 Tareas:
 
-- [ ] Paquete npm ejecutable (`npx worktrees-manager`)
-- [ ] Instalación global (`npm i -g`)
+- [ ] `apps/server` sirve el build de producción de `apps/dashboard` (`vite build`) como estáticos desde el mismo origen — sustituye al proxy de Vite (`server.proxy["/api"]`) usado en dev.
+- [ ] `apps/server` deja de ser `private` y gana un punto de entrada ejecutable (`bin`) que arranca el servidor; puerto configurable (env var/flag) con valor por defecto documentado.
+- [ ] Al arrancar, imprime en consola la URL del dashboard (`http://localhost:PUERTO`) — sin auto-abrir el navegador, decisión explícita para no sorprender en entornos remotos/SSH.
+- [ ] Verificación real de instalación en un entorno limpio (`npx worktrees-manager` y `npm i -g`): confirmar que `better-sqlite3` compila y arranca sin pasos manuales — riesgo de dependencia nativa asumido conscientemente, sin sustituir la librería.
+- [ ] `npm publish` manual (no automatizado en CI por ahora) de la versión inicial `0.1.0`.
 
-**DoD**: a definir.
+**DoD**: `npx worktrees-manager` (probado en un entorno limpio, sin el repo clonado) instala, arranca el servidor y sirve el dashboard funcional en `localhost:PUERTO` desde el paquete publicado en el registro público de npm; `npm i -g worktrees-manager` igual. Sin auto-arranque como servicio de sistema (launchd/systemd) — explícitamente fuera de alcance de v1 (`docs/PROJECT_SPECIFICATION.md` §4).
+
+**Decisiones tomadas al definir esta fase (2026-07-29)**:
+
+- Publicación real al registro público de npm (no solo `npm pack`/`npm link` en local).
+- Riesgo de `better-sqlite3` (módulo nativo, compilación vía node-gyp en la instalación del usuario final) asumido sin cambiar de librería — se verifica en limpio en vez de migrar a una alternativa sin binding nativo.
+- Sin auto-apertura de navegador en el primer arranque.
+- Publicación manual, no vía pipeline de CI — se reconsidera si hay más versiones que publicar con frecuencia.
