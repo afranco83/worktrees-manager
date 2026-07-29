@@ -3,7 +3,12 @@ import type { FastifyBaseLogger } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-import { CurrentBranchNotFoundError, GitWorktreeOperationError, NotFoundError } from "../errors.js";
+import {
+  CurrentBranchNotFoundError,
+  GitWorktreeOperationError,
+  NotFoundError,
+  WorktreeProcessNotRunningError,
+} from "../errors.js";
 import { getProjectById } from "../projects/repository.js";
 import { getSettings } from "../settings/repository.js";
 import { copyGitignoredEnvFiles } from "./env-files.js";
@@ -37,7 +42,6 @@ import {
 } from "./repository.js";
 import {
   createWorktreeSchema,
-  deleteWorktreeQuerySchema,
   listLogEntriesQuerySchema,
   logEntrySchema,
   projectGitInfoSchema,
@@ -335,24 +339,43 @@ export const worktreesPlugin: FastifyPluginAsyncZod = async (fastify) => {
 
   fastify.delete(
     "/worktrees/:id",
-    {
-      schema: {
-        params: worktreeIdParamsSchema,
-        querystring: deleteWorktreeQuerySchema,
-      },
-    },
+    { schema: { params: worktreeIdParamsSchema } },
     async (request, reply) => {
       const worktree = requireWorktree(fastify.db, request.params.id);
       const project = requireProject(fastify.db, worktree.projectId);
 
       await withProjectLock(project.id, async () => {
-        await removeWorktree({
-          repoPath: project.localPath,
-          worktreePath: worktree.path,
-          force: request.query.force,
-        });
+        // Lock adicional por `worktree.id` (mismo que usa `processManager.start()`
+        // para su propio registro atómico) anidado dentro del de proyecto: sin
+        // él, un arranque concurrente al mismo worktree podría colarse entre
+        // parar y borrar, dejando un proceso vivo que acaba logueando contra
+        // una fila ya eliminada (violación de FK, puede tumbar el servidor
+        // entero) — `processManager.start()` ya comprueba dentro de ese mismo
+        // lock que el worktree sigue existiendo antes de registrarse, así que
+        // ambas operaciones no pueden decidir a la vez sobre el mismo worktree.
+        await withProjectLock(worktree.id, async () => {
+          // Se intenta parar siempre, sin fiarse de `processStatus` (leído
+          // antes de este lock, podría estar desfasado) — un worktree ya
+          // parado simplemente no tiene nada que parar.
+          await fastify.processManager.stop(worktree.id).catch((error: unknown) => {
+            if (!(error instanceof WorktreeProcessNotRunningError)) {
+              throw error;
+            }
+          });
 
-        deleteWorktree(fastify.db, worktree.id);
+          // Sin bypass por `force`: un worktree con cambios sin commitear no
+          // se puede borrar hasta que el propio usuario limpie el árbol —
+          // `git worktree remove` (sin `--force`) ya rechaza esta operación
+          // por su cuenta y ese rechazo se propaga tal cual (409,
+          // `WorktreeHasUncommittedChangesError`).
+          await removeWorktree({
+            repoPath: project.localPath,
+            worktreePath: worktree.path,
+            force: false,
+          });
+
+          deleteWorktree(fastify.db, worktree.id);
+        });
       });
 
       reply.code(204).send();

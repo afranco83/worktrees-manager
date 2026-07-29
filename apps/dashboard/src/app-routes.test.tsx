@@ -4,9 +4,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { projectSchema, type Project } from "@/features/projects/schemas";
+import { getStoredTheme } from "@/lib/theme";
 import {
   FAKE_HOME,
   resetProjectsStore,
@@ -44,11 +45,22 @@ function renderApp(initialPath = "/"): void {
   );
 }
 
+// Abrir el menú "Más" con `user.click` no responde de forma fiable en
+// jsdom — particularidad conocida de simulación de eventos de puntero de
+// base-ui bajo jsdom, no reproducible con un ratón real (verificado
+// manualmente en navegador). La activación por teclado sí abre con
+// fiabilidad, y es una forma igual de válida y accesible de hacerlo.
+async function openMoreActionsMenu(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  screen.getByRole("button", { name: "Más" }).focus();
+  await user.keyboard("{Enter}");
+}
+
 describe("app routes", () => {
   beforeEach(() => {
     resetProjectsStore();
     resetWorktreesStore();
     resetSettingsStore();
+    document.documentElement.classList.remove("dark");
   });
 
   it("should show an empty state at / when no project has been registered yet", async () => {
@@ -64,11 +76,8 @@ describe("app routes", () => {
     resetProjectsStore([EXISTING_PROJECT]);
     renderApp();
 
-    expect(await screen.findByRole("heading", { name: EXISTING_PROJECT.name })).toBeInTheDocument();
-    // La ruta local también aparece en el sidebar: se acota la búsqueda al panel
-    // de detalle (<main>) para no ser ambiguo.
     expect(
-      within(screen.getByRole("main")).getByText(EXISTING_PROJECT.localPath),
+      await within(screen.getByRole("main")).findByRole("heading", { name: EXISTING_PROJECT.name }),
     ).toBeInTheDocument();
   });
 
@@ -84,6 +93,58 @@ describe("app routes", () => {
     await user.click(screen.getByRole("link", { name: new RegExp(secondProject.name) }));
 
     expect(await screen.findByRole("heading", { name: secondProject.name })).toBeInTheDocument();
+  });
+
+  it("should only show a project's local path as a tooltip in the sidebar, not as always-visible text", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    const link = await screen.findByRole("link", { name: EXISTING_PROJECT.name });
+
+    expect(screen.queryByText(EXISTING_PROJECT.localPath)).not.toBeInTheDocument();
+
+    await user.hover(link);
+
+    expect(await screen.findByText(EXISTING_PROJECT.localPath)).toBeInTheDocument();
+  });
+
+  it("should toggle dark mode from the sidebar and persist the preference", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    // El entorno de test no trae un `localStorage` real (de ahí el aviso
+    // "localStorage is not available" que se ve en toda la suite) — se
+    // stubea uno en memoria para poder comprobar que la preferencia
+    // realmente se persiste, no solo que cambia la clase del documento.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    });
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByRole("heading", { name: EXISTING_PROJECT.name });
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(getStoredTheme()).toBe("light");
+
+    await user.click(screen.getByRole("button", { name: "Activar modo oscuro" }));
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(getStoredTheme()).toBe("dark");
+    expect(screen.getByRole("button", { name: "Activar modo claro" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Activar modo claro" }));
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(getStoredTheme()).toBe("light");
+
+    vi.unstubAllGlobals();
   });
 
   it("should add a project from the sidebar and navigate to its detail page", async () => {
@@ -276,7 +337,7 @@ describe("app routes", () => {
     resetProjectsStore([EXISTING_PROJECT]);
     renderApp();
 
-    expect(await screen.findByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+    expect(await screen.findByText("Crea tu primer worktree")).toBeInTheDocument();
   });
 
   it("should create a worktree from the default branch and list it", async () => {
@@ -285,7 +346,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
 
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
@@ -300,13 +361,14 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    await user.click(screen.getByRole("button", { name: "Abrir terminal" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Terminal" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -317,21 +379,21 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    expect(screen.getByText("Parado")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Arrancar" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
 
-    expect(await screen.findByText("Corriendo")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Parar" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Parar entorno" }));
+    await user.click(screen.getByRole("button", { name: "Parar" }));
 
-    expect(await screen.findByText("Parado")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Arrancar" })).toBeInTheDocument();
   });
 
   it("should set and clear a worktree's dev command override", async () => {
@@ -340,7 +402,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -348,7 +410,8 @@ describe("app routes", () => {
 
     expect(screen.queryByText("Comando personalizado")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Comando de arranque" }));
     await user.type(
       screen.getByLabelText("Comando de arranque"),
       "pnpm dev -- --filter=api --filter=storefront",
@@ -357,7 +420,8 @@ describe("app routes", () => {
 
     expect(await screen.findByText("Comando personalizado")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Editar comando de arranque" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Comando de arranque" }));
     await user.clear(screen.getByLabelText("Comando de arranque"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
@@ -372,7 +436,7 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
@@ -380,13 +444,15 @@ describe("app routes", () => {
 
     expect(screen.queryByText(/^PR #/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Asociar PR" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "PR" }));
     await user.type(screen.getByLabelText("Número de PR"), "7");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     expect(await screen.findByText("PR #7 · Abierta")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Asociar PR" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "PR" }));
     await user.clear(screen.getByLabelText("Número de PR"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
@@ -401,18 +467,136 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    await user.click(screen.getByRole("button", { name: "Arrancar entorno" }));
-    await screen.findByText("Corriendo");
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
+    await screen.findByRole("button", { name: "Parar" });
 
-    await user.click(screen.getByRole("button", { name: "Ver logs" }));
+    await user.click(screen.getByRole("button", { name: "Logs" }));
 
     expect(await screen.findByText("Servidor de desarrollo arrancado")).toBeInTheDocument();
+  });
+
+  it("should clear the visible log entries without deleting the underlying history", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Crea tu primer worktree");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
+    await screen.findByRole("button", { name: "Parar" });
+
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+    await screen.findByText("Servidor de desarrollo arrancado");
+
+    await user.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(screen.queryByText("Servidor de desarrollo arrancado")).not.toBeInTheDocument();
+    expect(screen.getByText("Todavía no hay salida de este proceso.")).toBeInTheDocument();
+
+    // Solo limpia la vista actual: al reabrir el diálogo, el histórico sigue
+    // ahí de verdad (no se ha borrado nada en el servidor).
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+
+    expect(await screen.findByText("Servidor de desarrollo arrancado")).toBeInTheDocument();
+  });
+
+  it("should copy the plain-text log to the clipboard", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    // Se muta `navigator.clipboard` en vez de sustituir todo `navigator` vía
+    // `vi.stubGlobal`: un `{ ...navigator }` sale vacío (sus propiedades
+    // reales viven en el prototipo), así que reemplazarlo entero rompería
+    // cualquier otro código que dependa de un `navigator` real durante el
+    // test. Se define DESPUÉS de `userEvent.setup()` a propósito: este
+    // último instala su propio stub de `navigator.clipboard` (lo necesita
+    // para simular copiar/pegar), y lo haría después si se definiera antes,
+    // pisando este mock.
+    const originalClipboard = navigator.clipboard as Clipboard | undefined;
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    try {
+      renderApp();
+
+      await screen.findByText("Crea tu primer worktree");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await screen.findByText("feature-a");
+
+      await user.click(screen.getByRole("button", { name: "Arrancar" }));
+      await screen.findByRole("button", { name: "Parar" });
+
+      await user.click(screen.getByRole("button", { name: "Logs" }));
+      await screen.findByText("Servidor de desarrollo arrancado");
+
+      await user.click(screen.getByRole("button", { name: "Copiar" }));
+
+      // El botón solo pasa a "Copiado" después de que `writeText` resuelva
+      // (`handleCopy` es async) — esperar a él antes de comprobar la llamada
+      // asegura que la promesa ya se ha resuelto.
+      expect(await screen.findByRole("button", { name: "Copiado" })).toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining("Servidor de desarrollo arrancado"),
+      );
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        value: originalClipboard,
+        configurable: true,
+      });
+    }
+  });
+
+  it("should download the plain-text log as a .txt file named after the branch", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+    const objectUrl = "blob:mock-url";
+    // Se sobrescriben solo los dos métodos estáticos necesarios — sustituir
+    // el propio `URL` global (vía `vi.stubGlobal`) rompe cualquier `new URL()`
+    // real que ocurra durante el test (usado, p. ej., por react-router).
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => objectUrl);
+    URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    try {
+      const user = userEvent.setup();
+      renderApp();
+
+      await screen.findByText("Crea tu primer worktree");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+      await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+      await screen.findByText("feature-a");
+
+      await user.click(screen.getByRole("button", { name: "Arrancar" }));
+      await screen.findByRole("button", { name: "Parar" });
+
+      await user.click(screen.getByRole("button", { name: "Logs" }));
+      await screen.findByText("Servidor de desarrollo arrancado");
+
+      await user.click(screen.getByRole("button", { name: "Descargar" }));
+
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(clickSpy.mock.instances[0]).toHaveProperty("download", "feature-a-logs.txt");
+      expect(clickSpy.mock.instances[0]).toHaveProperty("href", objectUrl);
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+      clickSpy.mockRestore();
+    }
   });
 
   it("should delete a clean worktree when the deletion is confirmed", async () => {
@@ -421,42 +605,125 @@ describe("app routes", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-a");
 
-    await user.click(screen.getByRole("button", { name: "Borrar worktree" }));
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Borrar" }));
     await screen.findByText("Borrar worktree: feature-a");
     await user.click(screen.getByRole("button", { name: "Borrar" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
+      expect(screen.getByText("Crea tu primer worktree")).toBeInTheDocument();
     });
   });
 
-  it("should offer to force-delete a worktree with uncommitted changes", async () => {
+  it("should refuse to delete a worktree with uncommitted changes, with no way to force it", async () => {
     resetProjectsStore([EXISTING_PROJECT]);
 
     const user = userEvent.setup();
     renderApp();
 
-    await screen.findByText("Todavía no hay worktrees creados.");
+    await screen.findByText("Crea tu primer worktree");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await user.type(screen.getByLabelText("Nueva rama"), "feature-dirty");
     await user.click(screen.getByRole("button", { name: "Crear worktree" }));
     await screen.findByText("feature-dirty");
 
+    await openMoreActionsMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Borrar" }));
+
+    expect(
+      await screen.findByText(/tiene cambios sin commitear/, { exact: false }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Borrar" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Forzar borrado" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // El worktree sigue existiendo: no ha habido forma de colar el borrado.
+    expect(screen.getByText("feature-dirty")).toBeInTheDocument();
+  });
+
+  it("should navigate to the worktree detail page and show its info", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Crea tu primer worktree");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+
+    expect(await screen.findByRole("heading", { name: "feature-a" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", {
+        name: new RegExp(EXISTING_PROJECT.name),
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(EXISTING_PROJECT.devCommand)).toBeInTheDocument();
+    expect(screen.getByText("Sin Pull Request asociada.")).toBeInTheDocument();
+  });
+
+  it("should start and stop the worktree's dev environment from the detail page", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Crea tu primer worktree");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    await screen.findByRole("heading", { name: "feature-a" });
+
+    await user.click(screen.getByRole("button", { name: "Arrancar" }));
+
+    expect(await screen.findByRole("button", { name: "Parar" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Parar" }));
+
+    expect(await screen.findByRole("button", { name: "Arrancar" })).toBeInTheDocument();
+  });
+
+  it("should delete the worktree from the detail page and navigate back to the project", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText("Crea tu primer worktree");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await user.type(screen.getByLabelText("Nueva rama"), "feature-a");
+    await user.click(screen.getByRole("button", { name: "Crear worktree" }));
+    await screen.findByText("feature-a");
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
+    await screen.findByRole("heading", { name: "feature-a" });
+
     await user.click(screen.getByRole("button", { name: "Borrar worktree" }));
+    await screen.findByText("Borrar worktree: feature-a");
     await user.click(screen.getByRole("button", { name: "Borrar" }));
 
-    const forceButton = await screen.findByRole("button", { name: "Forzar borrado" });
-    await user.click(forceButton);
+    // Vuelve a la página del proyecto (el worktree ya no existe, no tendría
+    // sentido quedarse en su propia vista de detalle).
+    expect(await screen.findByRole("heading", { name: EXISTING_PROJECT.name })).toBeInTheDocument();
+    expect(screen.getByText("Crea tu primer worktree")).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText("Todavía no hay worktrees creados.")).toBeInTheDocument();
-    });
+  it("should show a not-found message for a worktree id that does not exist", async () => {
+    resetProjectsStore([EXISTING_PROJECT]);
+    renderApp(`/projects/${EXISTING_PROJECT.id}/worktrees/does-not-exist`);
+
+    expect(await screen.findByText("No se ha encontrado el worktree.")).toBeInTheDocument();
   });
 
   it("should update the terminal preference and port range from the settings dialog", async () => {

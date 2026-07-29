@@ -92,5 +92,13 @@ export function useWorktreeLogs(worktreeId: string, enabled: boolean) {
     };
   }, [worktreeId, enabled]);
 
-  return { entries, isLoading, isError };
+  // Limpia solo la vista actual (como el "clear" de una terminal o de la
+  // consola del navegador) — no borra nada en el servidor. Las líneas nuevas
+  // que lleguen después se siguen añadiendo con normalidad; al reabrir el
+  // diálogo se vuelve a pedir el histórico completo.
+  function clearEntries(): void {
+    setEntries([]);
+  }
+
+  return { entries, isLoading, isError, clearEntries };
 }

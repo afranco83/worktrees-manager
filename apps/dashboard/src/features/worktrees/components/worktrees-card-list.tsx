@@ -1,132 +1,96 @@
 import {
+  Eye,
+  GitBranchPlus,
   GitPullRequest,
+  Loader2,
+  MoreHorizontal,
   Play,
   ScrollText,
   SlidersHorizontal,
   Square,
-  Terminal,
+  Terminal as TerminalIcon,
   Trash2,
 } from "lucide-react";
-import { useState, type ComponentProps } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { IconButton } from "@/components/ui/icon-button";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import { useOpenWorktreeTerminal } from "../api/use-open-worktree-terminal";
 import { useStartWorktree } from "../api/use-start-worktree";
 import { useStopWorktree } from "../api/use-stop-worktree";
 import { useWorktreePullRequest } from "../api/use-worktree-pull-request";
-import { stripAnsiCodes } from "../lib/strip-ansi-codes";
-import type {
-  DetectedPort,
-  GitStatusSummary,
-  LogEntry,
-  PullRequestState,
-  Worktree,
-  WorktreeProcessStatus,
-  WorktreeProcessStep,
-} from "../schemas";
+import { useIsWorktreeStarting } from "../hooks/use-is-worktree-starting";
+import {
+  PROCESS_STEP_LABELS,
+  PULL_REQUEST_STATE_BADGE_VARIANTS,
+  PULL_REQUEST_STATE_LABELS,
+} from "../lib/worktree-labels";
+import type { Worktree, WorktreeProcessStatus, WorktreeProcessStep } from "../schemas";
 import { EditWorktreeDevCommandDialog } from "./edit-worktree-dev-command-dialog";
 import { EditWorktreePrDialog } from "./edit-worktree-pr-dialog";
 import { WorktreeLogsDialog } from "./worktree-logs-dialog";
+import { GitStatusBadge, WorktreePorts } from "./worktree-status-badges";
 
-const PROCESS_STATUS_LABELS: Record<WorktreeProcessStatus, string> = {
-  stopped: "Parado",
-  starting: "Arrancando…",
-  running: "Corriendo",
+// `running`/`stopped`/`starting` ya se deducen del propio botón de
+// arranque/parada (icono, color y loader mientras arranca o para) — mostrar
+// además texto sería redundante. `error` sí lo necesita: el botón vuelve al
+// mismo "Arrancar entorno" verde de un worktree parado, así que sin esta
+// etiqueta sería indistinguible de un simple "parado".
+const PROCESS_STATUS_LABELS: Partial<Record<WorktreeProcessStatus, string>> = {
   error: "Error",
 };
 
-const PROCESS_STATUS_BADGE_VARIANTS: Record<
-  WorktreeProcessStatus,
-  ComponentProps<typeof Badge>["variant"]
-> = {
-  stopped: "secondary",
-  starting: "outline",
-  running: "default",
-  error: "destructive",
+const PROCESS_STATUS_DOT_COLORS: Partial<Record<WorktreeProcessStatus, string>> = {
+  error: "bg-destructive",
 };
 
-const PROCESS_STEP_LABELS: Record<WorktreeProcessStep, string> = {
-  "installing-dependencies": "Instalando dependencias…",
-  "starting-dev-command": "Arrancando comando de dev…",
-};
+// Los botones de la barra inferior de la card comparten forma (el borde
+// redondeado de las esquinas lo resuelve el `overflow-hidden` del propio
+// `Card`, no hace falta redondear aquí cada botón). `bg-clip-border` pisa el
+// `bg-clip-padding` de base de `Button`: si no, el fondo no llega a pintar
+// bajo el borde transparente de cada botón y deja un hueco de 1-2px entre
+// botones contiguos por el que se cuela el fondo del `CardFooter`.
+const FOOTER_BUTTON_CLASSNAME =
+  "h-11 w-full gap-1 rounded-none bg-clip-border px-1.5 text-[0.8rem]";
 
-const PULL_REQUEST_STATE_LABELS: Record<PullRequestState, string> = {
-  open: "Abierta",
-  closed: "Cerrada",
-  merged: "Mergeada",
-};
+// Con 4 acciones en una sola fila, el hueco disponible por botón depende del
+// ancho real de la card, no del viewport — la propia card puede ocupar 1, 2 o
+// 3 columnas del grid del listado según el tamaño de pantalla. Se usa una
+// container query sobre el propio `CardFooter` (`@container/card-footer`, ver
+// `card.tsx`) en vez de un breakpoint de página, para que el texto se oculte
+// justo antes de que el hueco se quede apretado, sea cual sea el motivo por
+// el que la card es estrecha. El nombre accesible del botón no depende de
+// este texto (cada uno lleva su propio `aria-label`, ver más abajo), así que
+// ocultarlo aquí no deja el botón sin nombre para lectores de pantalla.
+const FOOTER_BUTTON_LABEL_CLASSNAME = "hidden @sm/card-footer:inline";
 
-const PULL_REQUEST_STATE_BADGE_VARIANTS: Record<
-  PullRequestState,
-  ComponentProps<typeof Badge>["variant"]
-> = {
-  open: "default",
-  closed: "destructive",
-  merged: "secondary",
-};
+function ProcessStatusIndicator({ status }: { status: WorktreeProcessStatus }) {
+  const label = PROCESS_STATUS_LABELS[status];
 
-function PortLink({ port, label }: { port: number; label?: string | null }) {
-  return (
-    <a
-      href={`http://localhost:${port}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline-offset-2 hover:underline"
-    >
-      {label ? `${label}: ${port}` : `Puerto ${port}`}
-    </a>
-  );
-}
-
-// Un monorepo con varias apps (turbo, workspaces...) puede levantar más de un
-// puerto real; el único `port` asignado solo es el que se pasa como PORT al
-// devCommand, así que en cuanto se detectan puertos reales en los logs se
-// muestran esos en su lugar, con la app que los anuncia si se pudo extraer
-// del prefijo de log (ver ADR-0007/ADR-0008). Solo son clicables mientras el
-// entorno está corriendo — un puerto parado no tiene nada escuchando.
-function WorktreePorts({ worktree }: { worktree: Worktree }) {
-  if (worktree.processStatus !== "running") {
-    return <p className="text-sm text-muted-foreground">Puerto {worktree.port}</p>;
-  }
-
-  const ports: DetectedPort[] =
-    worktree.detectedPorts.length > 0
-      ? worktree.detectedPorts
-      : [{ port: worktree.port, label: null }];
-
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
-      {ports.map(({ port, label }) => (
-        <PortLink key={port} port={port} label={label} />
-      ))}
-    </div>
-  );
-}
-
-// Aviso de seguridad ante el borrado, no un resumen de ficheros (ver
-// ADR-0012): silencio cuando no hay nada pendiente o cuando `gitStatus` es
-// `null` (no se pudo determinar, p. ej. el directorio ya no existe en
-// disco) — mostrar "sin cambios" en ese caso afirmaría algo que no se sabe.
-function GitStatusBadge({ gitStatus }: { gitStatus: GitStatusSummary | null }) {
-  if (gitStatus === null) {
+  if (label == null) {
     return null;
   }
 
   return (
-    <>
-      {gitStatus.hasUncommittedChanges && <Badge variant="secondary">Cambios sin commitear</Badge>}
-      {gitStatus.hasUnpushedCommits && <Badge variant="secondary">Commits sin subir</Badge>}
-    </>
+    <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <span
+        aria-hidden="true"
+        className={cn("size-2 rounded-full", PROCESS_STATUS_DOT_COLORS[status])}
+      />
+      {label}
+    </span>
   );
 }
 
@@ -153,14 +117,13 @@ function PullRequestBadge({ worktreeId }: { worktreeId: string }) {
 function WorktreeCard({
   worktree,
   step,
-  latestLog,
   onDelete,
 }: {
   worktree: Worktree;
   step: WorktreeProcessStep | null;
-  latestLog: LogEntry | undefined;
   onDelete: (worktree: Worktree) => void;
 }) {
+  const navigate = useNavigate();
   const openTerminal = useOpenWorktreeTerminal();
   const startWorktree = useStartWorktree();
   const stopWorktree = useStopWorktree();
@@ -169,71 +132,38 @@ function WorktreeCard({
   const [isEditPrOpen, setIsEditPrOpen] = useState(false);
 
   const isTransitioning = worktree.processStatus === "starting";
+  const isStarting = useIsWorktreeStarting(worktree, startWorktree.isPending);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle level={4}>{worktree.branch}</CardTitle>
-        <CardDescription className="truncate">{worktree.path}</CardDescription>
-        <CardAction className="flex gap-2">
-          {worktree.processStatus === "running" ? (
-            <IconButton
-              icon={Square}
-              label="Parar entorno"
-              disabled={isTransitioning || stopWorktree.isPending}
-              onClick={() => stopWorktree.mutate(worktree.id)}
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <CardTitle level={4} className="w-fit truncate">
+                  {worktree.branch}
+                </CardTitle>
+              }
             />
-          ) : (
-            <IconButton
-              icon={Play}
-              label="Arrancar entorno"
-              disabled={isTransitioning || startWorktree.isPending}
-              onClick={() => startWorktree.mutate(worktree.id)}
-            />
-          )}
-          <IconButton icon={ScrollText} label="Ver logs" onClick={() => setIsLogsOpen(true)} />
-          <IconButton
-            icon={SlidersHorizontal}
-            label="Editar comando de arranque"
-            onClick={() => setIsEditDevCommandOpen(true)}
-          />
-          <IconButton
-            icon={Terminal}
-            label="Abrir terminal"
-            onClick={() => openTerminal.mutate(worktree.id)}
-          />
-          <IconButton
-            icon={GitPullRequest}
-            label="Asociar PR"
-            onClick={() => setIsEditPrOpen(true)}
-          />
-          <IconButton
-            icon={Trash2}
-            label="Borrar worktree"
-            variant="destructive"
-            onClick={() => onDelete(worktree)}
-          />
-        </CardAction>
+            <TooltipContent>{worktree.path}</TooltipContent>
+          </Tooltip>
+          <GitStatusBadge gitStatus={worktree.gitStatus} />
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Badge variant={PROCESS_STATUS_BADGE_VARIANTS[worktree.processStatus]}>
-            {PROCESS_STATUS_LABELS[worktree.processStatus]}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <ProcessStatusIndicator status={worktree.processStatus} />
+          <WorktreePorts worktree={worktree} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           {worktree.devCommandOverride != null && (
             <Badge variant="outline">Comando personalizado</Badge>
           )}
-          <GitStatusBadge gitStatus={worktree.gitStatus} />
           <PullRequestBadge worktreeId={worktree.id} />
-          <WorktreePorts worktree={worktree} />
         </div>
         {isTransitioning && step != null && (
           <p className="text-sm text-muted-foreground">{PROCESS_STEP_LABELS[step]}</p>
-        )}
-        {worktree.processStatus !== "stopped" && latestLog != null && (
-          <p className="truncate font-mono text-xs text-muted-foreground">
-            {stripAnsiCodes(latestLog.content)}
-          </p>
         )}
         {openTerminal.isError && (
           <p className="text-sm text-destructive" role="alert">
@@ -251,6 +181,86 @@ function WorktreeCard({
           </p>
         )}
       </CardContent>
+      <CardFooter className="grid grid-cols-4 divide-x divide-border bg-card p-0">
+        {isStarting ? (
+          // Antes que el `processStatus === "running"` de abajo a propósito:
+          // el backend marca "running" en cuanto el proceso hace spawn (ver
+          // ADR-0007/`process-manager.ts`), y ese evento de socket llega casi
+          // siempre antes de que esta mutación se resuelva — sin esta
+          // prioridad, el botón de parar sustituiría al loader de inmediato.
+          <Button
+            variant="default"
+            disabled
+            aria-label="Arrancando…"
+            className={FOOTER_BUTTON_CLASSNAME}
+          >
+            <Loader2 className="animate-spin" />{" "}
+            <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Arrancando…</span>
+          </Button>
+        ) : worktree.processStatus === "running" ? (
+          <Button
+            variant="ghost"
+            disabled={stopWorktree.isPending}
+            onClick={() => stopWorktree.mutate(worktree.id)}
+            aria-label={stopWorktree.isPending ? "Parando…" : "Parar"}
+            className={cn(FOOTER_BUTTON_CLASSNAME, "bg-chart-1 text-black hover:bg-chart-1/80")}
+          >
+            {stopWorktree.isPending ? <Loader2 className="animate-spin" /> : <Square />}
+            <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>
+              {stopWorktree.isPending ? "Parando…" : "Parar"}
+            </span>
+          </Button>
+        ) : (
+          <Button
+            variant="default"
+            onClick={() => startWorktree.mutate(worktree.id)}
+            aria-label="Arrancar"
+            className={FOOTER_BUTTON_CLASSNAME}
+          >
+            <Play /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Arrancar</span>
+          </Button>
+        )}
+        <Button
+          variant="default"
+          onClick={() => navigate(`/projects/${worktree.projectId}/worktrees/${worktree.id}`)}
+          aria-label="Detalle"
+          className={FOOTER_BUTTON_CLASSNAME}
+        >
+          <Eye /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Detalle</span>
+        </Button>
+        <Button
+          variant="default"
+          onClick={() => setIsLogsOpen(true)}
+          aria-label="Logs"
+          className={FOOTER_BUTTON_CLASSNAME}
+        >
+          <ScrollText /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Logs</span>
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="default" aria-label="Más" className={FOOTER_BUTTON_CLASSNAME}>
+                <MoreHorizontal /> <span className={FOOTER_BUTTON_LABEL_CLASSNAME}>Más</span>
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem onClick={() => setIsEditDevCommandOpen(true)}>
+              <SlidersHorizontal /> Comando de arranque
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openTerminal.mutate(worktree.id)}>
+              <TerminalIcon /> Terminal
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsEditPrOpen(true)}>
+              <GitPullRequest /> PR
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => onDelete(worktree)}>
+              <Trash2 /> Borrar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardFooter>
 
       <WorktreeLogsDialog worktree={worktree} open={isLogsOpen} onOpenChange={setIsLogsOpen} />
       <EditWorktreeDevCommandDialog
@@ -270,29 +280,44 @@ function WorktreeCard({
 export function WorktreesCardList({
   worktrees,
   stepByWorktreeId,
-  latestLogByWorktreeId,
   onDelete,
+  onCreate,
 }: {
   worktrees: Worktree[];
   stepByWorktreeId: Record<string, WorktreeProcessStep | null>;
-  latestLogByWorktreeId: Record<string, LogEntry>;
   onDelete: (worktree: Worktree) => void;
+  onCreate: () => void;
 }) {
   if (worktrees.length === 0) {
-    return <p className="text-sm text-muted-foreground">Todavía no hay worktrees creados.</p>;
+    return (
+      <button
+        type="button"
+        onClick={onCreate}
+        className="flex min-h-[50vh] w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+      >
+        <GitBranchPlus className="size-10" />
+        <span className="text-sm font-medium">Crea tu primer worktree</span>
+      </button>
+    );
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {worktrees.map((worktree) => (
-        <WorktreeCard
-          key={worktree.id}
-          worktree={worktree}
-          step={stepByWorktreeId[worktree.id] ?? null}
-          latestLog={latestLogByWorktreeId[worktree.id]}
-          onDelete={onDelete}
-        />
-      ))}
+    // Container query, no breakpoint de viewport: el hueco real depende de
+    // si el sidebar está en modo persistente o no (ver `AppLayout`), no del
+    // ancho de la ventana — mismo motivo que `@container/card-footer` en
+    // `card.tsx`. Mismos umbrales que los `md`/`lg` que sustituyen (768px y
+    // 1024px), pero medidos contra el propio contenedor.
+    <div className="@container/worktree-grid">
+      <div className="grid gap-3 @[768px]/worktree-grid:grid-cols-2 @[1024px]/worktree-grid:grid-cols-3">
+        {worktrees.map((worktree) => (
+          <WorktreeCard
+            key={worktree.id}
+            worktree={worktree}
+            step={stepByWorktreeId[worktree.id] ?? null}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
     </div>
   );
 }

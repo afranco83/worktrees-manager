@@ -534,7 +534,7 @@ describe("worktrees plugin", () => {
     expect(list.json()).toEqual([]);
   });
 
-  it("should reject deleting a dirty worktree without force and succeed with force", async () => {
+  it("should reject deleting a dirty worktree, with no query param able to force it", async () => {
     const project = await createProject();
     const created = await app.inject({
       method: "POST",
@@ -551,19 +551,75 @@ describe("worktrees plugin", () => {
     expect(rejected.statusCode).toBe(409);
     expect(existsSync(worktree.path)).toBe(true);
 
-    const rejectedExplicitFalse = await app.inject({
-      method: "DELETE",
-      url: `/api/worktrees/${worktree.id}?force=false`,
-    });
-    expect(rejectedExplicitFalse.statusCode).toBe(409);
-    expect(existsSync(worktree.path)).toBe(true);
-
-    const forced = await app.inject({
+    // El endpoint ya no acepta ningún bypass: el usuario tiene que limpiar el
+    // árbol él mismo antes de poder borrar.
+    const stillRejected = await app.inject({
       method: "DELETE",
       url: `/api/worktrees/${worktree.id}?force=true`,
     });
-    expect(forced.statusCode).toBe(204);
+    expect(stillRejected.statusCode).toBe(409);
+    expect(existsSync(worktree.path)).toBe(true);
+  });
+
+  it("should stop a running worktree's dev process before deleting it, instead of orphaning it", async () => {
+    const devCommand = writeDevScript("setInterval(() => {}, 1000);");
+    const project = await createProject({ devCommand });
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-running-delete", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    mkdirSync(join(worktree.path, "node_modules"));
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: `/api/worktrees/${worktree.id}/start`,
+    });
+    expect(startResponse.statusCode).toBe(200);
+    const { pid } = startResponse.json();
+    expect(pid).toEqual(expect.any(Number));
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/worktrees/${worktree.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(204);
     expect(existsSync(worktree.path)).toBe(false);
+    // El proceso realmente ha terminado, no solo se ha soltado su registro —
+    // `process.kill(pid, 0)` no envía ninguna señal, solo lanza si el PID ya
+    // no existe.
+    expect(() => process.kill(pid, 0)).toThrow();
+  });
+
+  it("should refuse to start a worktree that was deleted after being read but before registering", async () => {
+    const devCommand = writeDevScript("setInterval(() => {}, 1000);");
+    const project = await createProject({ devCommand });
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/worktrees`,
+      payload: { newBranch: "feature-start-after-delete", base: { type: "default" } },
+    });
+    const worktree = created.json();
+    mkdirSync(join(worktree.path, "node_modules"));
+
+    // Simula la ventana de carrera: `worktree` es el dato ya leído por un
+    // cliente justo antes de que otro borre el worktree — `processManager`
+    // se llama directamente (saltándose el 404 de nivel de ruta de
+    // `requireWorktree`) para ejercitar la comprobación que hace la propia
+    // sección crítica de `start()`, no la de la ruta.
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/worktrees/${worktree.id}`,
+    });
+    expect(deleteResponse.statusCode).toBe(204);
+
+    await expect(app.processManager.start(worktree, project)).rejects.toThrow(/ya no existe/);
+
+    // Sin proceso huérfano: el registro interno no debe haberse quedado con
+    // nada para un worktree que nunca debió llegar a arrancar.
+    expect(app.processManager.getDetectedPorts(worktree.id)).toEqual([]);
   });
 
   it("should return 404 when deleting a worktree id that does not exist", async () => {

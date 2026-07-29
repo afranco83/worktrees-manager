@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Worktrees Manager</title>
+    <script>
+      // Aplica el tema guardado antes de pintar nada, para no parpadear en
+      // claro y saltar a oscuro un instante después (ver src/lib/theme.ts,
+      // que debe leer la misma clave). Claro es el valor por defecto.
+      try {
+        if (localStorage.getItem("worktrees-manager:theme") === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+      } catch {
+        // localStorage puede no estar disponible (p. ej. modo privado con
+        // restricciones); claro por defecto es una degradación aceptable.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

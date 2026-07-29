@@ -242,7 +242,12 @@ export const handlers = [
       createdAt: new Date().toISOString(),
       devCommandOverride: null,
       detectedPorts: [],
-      gitStatus: { hasUncommittedChanges: false, hasUnpushedCommits: false },
+      // Convención ya usada por el resto de la suite: una rama con "dirty" en
+      // el nombre simula un worktree con cambios sin commitear.
+      gitStatus: {
+        hasUncommittedChanges: body.newBranch.includes("dirty"),
+        hasUnpushedCommits: false,
+      },
     };
     nextWorktreePort += 1;
 
@@ -274,9 +279,8 @@ export const handlers = [
     return HttpResponse.json(updated);
   }),
 
-  http.delete("/api/worktrees/:id", ({ params, request }) => {
+  http.delete("/api/worktrees/:id", ({ params }) => {
     const id = requirePathParam(params.id);
-    const force = new URL(request.url).searchParams.get("force") === "true";
 
     for (const [projectId, worktrees] of Object.entries(worktreesStore)) {
       const worktree = worktrees.find((candidate) => candidate.id === id);
@@ -285,7 +289,10 @@ export const handlers = [
         continue;
       }
 
-      if (worktree.branch.includes("dirty") && !force) {
+      // Sin bypass: coherente con que el backend real ya no acepta ningún
+      // parámetro para forzar el borrado de un worktree con cambios sin
+      // commitear.
+      if (worktree.branch.includes("dirty")) {
         return HttpResponse.json(
           {
             error: "Conflict",
@@ -337,7 +344,15 @@ export const handlers = [
       );
     }
 
-    const updated: Worktree = { ...entry.worktree, processStatus: "running", pid: 12345 };
+    const updated: Worktree = {
+      ...entry.worktree,
+      processStatus: "running",
+      pid: 12345,
+      // La card espera a ver un puerto real detectado antes de dar el
+      // arranque por terminado (ver `worktrees-card-list.tsx`) — un arranque
+      // que nunca reporta ningún puerto no reflejaría un `devCommand` real.
+      detectedPorts: [{ port: entry.worktree.port, label: null }],
+    };
     worktreesStore = {
       ...worktreesStore,
       [entry.projectId]: worktreesStore[entry.projectId].map((worktree) =>

@@ -5,10 +5,8 @@ import { socket } from "@/lib/socket";
 
 import {
   detectedPortsEventSchema,
-  logEntryEventSchema,
   processStatusEventSchema,
   processStepEventSchema,
-  type LogEntry,
   type Worktree,
   type WorktreeProcessStep,
 } from "../schemas";
@@ -32,13 +30,11 @@ export function useWorktrees(projectId: string) {
   });
 
   // Estado en vivo transitorio (no forma parte del `Worktree` persistido):
-  // sub-paso dentro de "starting" y la última línea de log de cada worktree,
-  // para dar feedback de progreso en la propia card sin abrir el diálogo de
-  // logs (ver ADR-0007 y el hallazgo de UX sobre feedback de arranque).
+  // sub-paso dentro de "starting", para dar feedback de progreso en la propia
+  // card sin abrir el diálogo de logs (ver ADR-0007).
   const [stepByWorktreeId, setStepByWorktreeId] = useState<
     Record<string, WorktreeProcessStep | null>
   >({});
-  const [latestLogByWorktreeId, setLatestLogByWorktreeId] = useState<Record<string, LogEntry>>({});
 
   useEffect(() => {
     const worktrees = query.data;
@@ -103,30 +99,15 @@ export function useWorktrees(projectId: string) {
       }));
     }
 
-    function handleLogEntry(event: unknown): void {
-      const result = logEntryEventSchema.safeParse(event);
-
-      if (!result.success) {
-        return;
-      }
-
-      setLatestLogByWorktreeId((current) => ({
-        ...current,
-        [result.data.worktreeId]: result.data.entry,
-      }));
-    }
-
     socket.on("process-status", handleProcessStatus);
     socket.on("detected-ports", handleDetectedPorts);
     socket.on("process-step", handleProcessStep);
-    socket.on("log-entry", handleLogEntry);
 
     return () => {
       socket.off("connect", joinAllRooms);
       socket.off("process-status", handleProcessStatus);
       socket.off("detected-ports", handleDetectedPorts);
       socket.off("process-step", handleProcessStep);
-      socket.off("log-entry", handleLogEntry);
 
       for (const worktree of worktrees) {
         socket.emit("leave-worktree", worktree.id);
@@ -134,5 +115,5 @@ export function useWorktrees(projectId: string) {
     };
   }, [query.data, projectId, queryClient]);
 
-  return { ...query, stepByWorktreeId, latestLogByWorktreeId };
+  return { ...query, stepByWorktreeId };
 }

@@ -9,6 +9,7 @@ import treeKill from "tree-kill";
 
 import {
   DevCommandSpawnError,
+  NotFoundError,
   WorktreeProcessAlreadyRunningError,
   WorktreeProcessNotRunningError,
 } from "../errors.js";
@@ -19,7 +20,7 @@ import {
   hasNodeModules,
 } from "./package-manager.js";
 import { withProjectLock } from "./project-lock.js";
-import { updateWorktreeProcessState } from "./repository.js";
+import { getWorktreeById, updateWorktreeProcessState } from "./repository.js";
 import type {
   DetectedPort,
   Worktree,
@@ -195,10 +196,29 @@ export function createProcessManager({
     command: string,
     cwd: string,
     env: NodeJS.ProcessEnv,
-  ): Promise<{ child: ResultPromise; outcome: "spawned" | "spawn-failed" }> {
+  ): Promise<{
+    child: ResultPromise;
+    outcome: "spawned" | "spawn-failed";
+    /**
+     * Resuelve una única vez, con lo primero que le pase al proceso ('close'
+     * o 'error'). Se registra ya aquí, antes de cualquier `await` de más
+     * abajo: si el listener se añadiera después (como antes), un `stop()`
+     * concurrente podría matar el proceso y emitir 'close' en ese hueco,
+     * perdiendo el evento sin más — nada volvería a resolver esta promesa,
+     * dejando a quien la espera colgado para siempre (found via un test que
+     * arranca y borra el mismo worktree a la vez).
+     */
+    closed: Promise<{ code: number | null; viaError: boolean }>;
+  }> {
     const child = execa(command, { shell: true, cwd, env, buffer: false, reject: false });
 
     tracked.child = child;
+
+    const closed = new Promise<{ code: number | null; viaError: boolean }>((resolve) => {
+      child.once("close", (code) => resolve({ code, viaError: false }));
+      child.once("error", () => resolve({ code: null, viaError: true }));
+    });
+
     streamOutput(worktreeId, child.stdout, "stdout", tracked);
     streamOutput(worktreeId, child.stderr, "stderr", tracked);
 
@@ -216,7 +236,7 @@ export function createProcessManager({
       once(child, "error").then(() => "spawn-failed" as const),
     ]);
 
-    return { child, outcome };
+    return { child, outcome, closed };
   }
 
   async function killTracked(tracked: TrackedProcess): Promise<void> {
@@ -244,7 +264,7 @@ export function createProcessManager({
     setStep(worktree.id, "installing-dependencies");
     logInfoLine(worktree.id, `▶ Instalando dependencias (${installCommand})…`);
 
-    const { child, outcome } = await spawnTracked(
+    const { outcome, closed } = await spawnTracked(
       worktree.id,
       tracked,
       installCommand,
@@ -260,15 +280,11 @@ export function createProcessManager({
     // terminado de emitir datos cuando llega 'exit' (un proceso que escribe
     // mucho output justo antes de salir puede aún tener líneas sin drenar
     // del pipe) — 'close' sí espera a que stdio se cierre del todo, evitando
-    // dar la instalación por terminada con output todavía en vuelo.
-    //
-    // Igual que en `spawnTracked`: `events.once` añade su propio listener de
-    // `'error'` mientras espera `'close'` y rechaza si `'error'` llega antes
-    // (raro tras un spawn ya confirmado, pero documentado por Node como
-    // posible) — se trata como una instalación fallida, no como una excepción
-    // sin capturar.
-    const exitArgs = await once(child, "close").catch(() => null);
-    const code = exitArgs?.[0] ?? 1;
+    // dar la instalación por terminada con output todavía en vuelo. `closed`
+    // ya cubre el caso `'error'` tardío (raro tras un spawn ya confirmado,
+    // pero documentado por Node como posible) sin necesidad de un `.catch`
+    // aparte aquí.
+    const { code } = await closed;
 
     if (tracked.isStoppingIntentionally) {
       return "stopped";
@@ -296,19 +312,36 @@ export function createProcessManager({
     // ese tiempo, un "Parar" pedido mientras se instalan dependencias se
     // quedaría esperando a que la instalación termine para hacer nada, justo
     // lo contrario de lo que se espera de un botón de parar.
-    const alreadyRunning = await withProjectLock(worktree.id, async () => {
+    //
+    // Mismo lock (por `worktree.id`) que usa `DELETE /worktrees/:id` para su
+    // propia sección crítica (parar-si-hace-falta + borrar), así que ambas
+    // operaciones no pueden decidir a la vez sobre el mismo worktree: la
+    // comprobación de que el worktree sigue existiendo en BD, aquí dentro,
+    // es lo que evita que un arranque se cuele justo después de que un
+    // borrado concurrente ya haya quitado la fila (si no, la primera línea
+    // de log de este arranque violaría la FK de `log_entries.worktree_id`
+    // contra una fila que ya no existe).
+    const registration = await withProjectLock(worktree.id, async () => {
       if (processes.has(worktree.id)) {
-        return true;
+        return "already-running" as const;
+      }
+
+      if (getWorktreeById(db, worktree.id) == null) {
+        return "deleted" as const;
       }
 
       processes.set(worktree.id, tracked);
-      return false;
+      return "ok" as const;
     });
 
-    if (alreadyRunning) {
+    if (registration === "already-running") {
       throw new WorktreeProcessAlreadyRunningError(
         `El worktree ${worktree.id} ya tiene un proceso de dev en marcha`,
       );
+    }
+
+    if (registration === "deleted") {
+      throw new NotFoundError(`El worktree ${worktree.id} ya no existe`);
     }
 
     setStatus(worktree.id, "starting", null);
@@ -341,38 +374,38 @@ export function createProcessManager({
     setStep(worktree.id, "starting-dev-command");
     logInfoLine(worktree.id, `▶ Arrancando: ${devCommand}`);
 
-    const { child, outcome } = await spawnTracked(worktree.id, tracked, devCommand, worktree.path, {
-      ...process.env,
-      PORT: String(worktree.port),
-    });
+    const { child, outcome, closed } = await spawnTracked(
+      worktree.id,
+      tracked,
+      devCommand,
+      worktree.path,
+      { ...process.env, PORT: String(worktree.port) },
+    );
 
-    // 'close', no 'exit': ver el comentario equivalente en
-    // `ensureDependenciesInstalled` — un `devCommand` que imprime un último
-    // burst de líneas justo antes de salir puede dejarlas sin drenar del
-    // pipe si se actúa ya en 'exit', podando (`pruneLogEntries`) sobre un
-    // conjunto de logs todavía incompleto.
-    child.once("close", (code) => {
-      const finalStatus: WorktreeProcessStatus =
-        tracked.isStoppingIntentionally || code === 0 ? "stopped" : "error";
+    // 'close', no 'exit': un `devCommand` que imprime un último burst de
+    // líneas justo antes de salir puede dejarlas sin drenar del pipe si se
+    // actúa ya en 'exit', podando (`pruneLogEntries`) sobre un conjunto de
+    // logs todavía incompleto. `closed` ya cubre también un `'error'` tardío
+    // (fallo poco habitual tras un spawn ya confirmado, p. ej. no se pudo
+    // enviar una señal) con el mismo desenlace: se trata como una salida con
+    // error. El caso "falló antes de arrancar" lo resuelve `outcome` de más
+    // abajo — la comprobación `processes.has()` de aquí evita repetir la
+    // limpieza si ya se ha encargado esa otra rama.
+    void closed.then(({ code, viaError }) => {
+      if (!processes.has(worktree.id)) {
+        return;
+      }
+
+      const finalStatus: WorktreeProcessStatus = viaError
+        ? "error"
+        : tracked.isStoppingIntentionally || code === 0
+          ? "stopped"
+          : "error";
 
       pruneLogEntries(db, worktree.id);
       setStatus(worktree.id, finalStatus, null);
       setStep(worktree.id, null);
       processes.delete(worktree.id);
-      resolveExited();
-    });
-
-    child.once("error", () => {
-      // Si ya se había confirmado el `spawn`, esto es un fallo tardío poco
-      // habitual (p. ej. no se pudo enviar una señal): se trata como una
-      // salida con error. El caso "falló antes de arrancar" lo resuelve
-      // `outcome` de más abajo, sin pasar por aquí.
-      if (processes.has(worktree.id)) {
-        setStatus(worktree.id, "error", null);
-        setStep(worktree.id, null);
-        processes.delete(worktree.id);
-      }
-
       resolveExited();
     });
 

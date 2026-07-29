@@ -70,7 +70,14 @@ function DialogContent({
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="dialog-header" className={cn("flex flex-col gap-2", className)} {...props} />
+    <div
+      data-slot="dialog-header"
+      // `pr-8` reserva el hueco del botón de cerrar (posicionado en
+      // absoluto en `DialogContent`) para que un título largo no se
+      // solape con él al partir en varias líneas.
+      className={cn("flex flex-col gap-2 pr-8", className)}
+      {...props}
+    />
   );
 }
 

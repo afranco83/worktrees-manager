@@ -76,7 +76,15 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
 
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="card-content" className={cn("px-(--card-spacing)", className)} {...props} />
+    <div
+      data-slot="card-content"
+      // `flex-1`: cuando varias cards conviven en la misma fila de un grid,
+      // este es el hueco (no el footer) que debe absorber la diferencia de
+      // altura entre ellas — si no, el footer de la card con menos contenido
+      // se queda flotando a media altura en vez de anclado abajo.
+      className={cn("flex-1 px-(--card-spacing)", className)}
+      {...props}
+    />
   );
 }
 
@@ -85,7 +93,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "@container/card-footer flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
         className,
       )}
       {...props}

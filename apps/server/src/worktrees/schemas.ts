@@ -97,15 +97,6 @@ export const worktreeIdParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
-export const deleteWorktreeQuerySchema = z.object({
-  // z.coerce.boolean() haría Boolean("false") === true: cualquier string no vacío
-  // se coacciona a true, así que se compara el texto explícitamente en su lugar.
-  force: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
-});
-
 export const projectGitInfoSchema = z.object({
   currentBranch: z.string().nullable(),
   defaultBranch: z.string().nullable(),
