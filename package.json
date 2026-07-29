@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -n dashboard,server -c blue,green \"pnpm --filter dashboard dev\" \"pnpm --filter server dev\"",
+    "build": "pnpm --filter dashboard run build && pnpm --filter server run build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r run typecheck",

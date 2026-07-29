@@ -7,6 +7,10 @@ node_modules/
 # build outputs
 dist/
 build/
+# build del dashboard copiado a apps/server para servirlo en producción
+# (ver apps/server/scripts/copy-dashboard-dist.mjs) — apps/dashboard/public/
+# es fuente versionada, no se ve afectada por este patrón con ruta explícita.
+apps/server/public/
 
 # testing
 coverage/

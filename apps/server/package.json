@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm run build:static && tsc -p tsconfig.json",
+    "build:static": "node scripts/copy-dashboard-dist.mjs",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.2",
     "better-sqlite3": "^12.4.1",
     "execa": "^9.6.1",
     "fastify": "^5.6.1",

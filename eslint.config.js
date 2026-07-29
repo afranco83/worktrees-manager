@@ -35,7 +35,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/server/**/*.ts"],
+    files: ["apps/server/**/*.ts", "apps/server/**/*.mjs"],
     languageOptions: {
       globals: globals.node,
     },
