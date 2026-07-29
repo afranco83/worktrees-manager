@@ -21,7 +21,7 @@ Stack: Vite + React + TypeScript (SPA, `apps/dashboard`) + Node.js + Fastify + S
 - Antes de implementar algo, comprueba en `docs/ROADMAP.md` en qué fase estamos y qué tareas de esa fase siguen pendientes.
 - Sigue el canon + las dos capas de stack importadas arriba al pie de la letra. `node-fastify` es la primera capa de backend del marketplace: si una convención no encaja con este proyecto en concreto, se corrige ahí (o en `docs/ARCHITECTURE.md` si es una decisión propia de este repo, no general del stack).
 - No adelantes trabajo de fases futuras (p. ej. no montes la distribución como paquete npm de la Fase 9 mientras no se pida explícitamente) salvo que el usuario lo pida explícitamente.
-- Comandos: `pnpm install`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm --filter dashboard dev`, `pnpm --filter server dev` (o `pnpm dev` para ambos a la vez).
+- Comandos: `pnpm install`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm --filter dashboard dev`, `pnpm --filter worktrees-manager dev` (o `pnpm dev` para ambos a la vez).
 - Cualquier decisión de arquitectura nueva y significativa se documenta con un ADR en `docs/adr/` en el momento en que se toma (ver `docs/adr/README.md`).
 - **Mejora continua activa**: siempre que una decisión tomada durante el trabajo pueda derivar en una actualización del canon/capas de `afai-conventions-tools` o del propio roadmap/arquitectura, se propone reflejarla en el documento correspondiente en el momento, no se deja pendiente.
 

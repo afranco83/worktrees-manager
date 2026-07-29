@@ -227,10 +227,9 @@ Tareas:
 
 Tareas:
 
-- [ ] `apps/server` sirve el build de producción de `apps/dashboard` (`vite build`) como estáticos desde el mismo origen — sustituye al proxy de Vite (`server.proxy["/api"]`) usado en dev.
-- [ ] `apps/server` deja de ser `private` y gana un punto de entrada ejecutable (`bin`) que arranca el servidor; puerto configurable (env var/flag) con valor por defecto documentado.
-- [ ] Al arrancar, imprime en consola la URL del dashboard (`http://localhost:PUERTO`) — sin auto-abrir el navegador, decisión explícita para no sorprender en entornos remotos/SSH.
-- [ ] Verificación real de instalación en un entorno limpio (`npx worktrees-manager` y `npm i -g`): confirmar que `better-sqlite3` compila y arranca sin pasos manuales — riesgo de dependencia nativa asumido conscientemente, sin sustituir la librería.
+- [x] `apps/server` sirve el build de producción de `apps/dashboard` (`vite build`) como estáticos desde el mismo origen — sustituye al proxy de Vite (`server.proxy["/api"]`) usado en dev. Fallback a `index.html` para rutas cliente de `react-router`, 404 JSON real para `/api/*` sin match.
+- [x] `apps/server` deja de ser `private` y gana un punto de entrada ejecutable (`bin`), con puerto configurable (`--port`/`--port=`, env var `PORT`, por defecto `4100`, validado con Zod) e imprime en consola la URL del dashboard al arrancar — sin auto-abrir el navegador, decisión explícita para no sorprender en entornos remotos/SSH.
+- [x] Verificación real de instalación en un entorno limpio: `npm pack` real + `npm install -g --prefix <aislado>` en un directorio y `$HOME` completamente ajenos al workspace de pnpm (sin hoisting/caché compartida). `better-sqlite3` resolvió su binario prebuilt sin compilar (riesgo de dependencia nativa asumido, sin incidencias); el binario global arrancó, creó el registro en el `$HOME` aislado y sirvió tanto `/health` como el dashboard real.
 - [ ] `npm publish` manual (no automatizado en CI por ahora) de la versión inicial `0.1.0`.
 
 **DoD**: `npx worktrees-manager` (probado en un entorno limpio, sin el repo clonado) instala, arranca el servidor y sirve el dashboard funcional en `localhost:PUERTO` desde el paquete publicado en el registro público de npm; `npm i -g worktrees-manager` igual. Sin auto-arranque como servicio de sistema (launchd/systemd) — explícitamente fuera de alcance de v1 (`docs/PROJECT_SPECIFICATION.md` §4).
@@ -241,3 +240,7 @@ Tareas:
 - Riesgo de `better-sqlite3` (módulo nativo, compilación vía node-gyp en la instalación del usuario final) asumido sin cambiar de librería — se verifica en limpio en vez de migrar a una alternativa sin binding nativo.
 - Sin auto-apertura de navegador en el primer arranque.
 - Publicación manual, no vía pipeline de CI — se reconsidera si hay más versiones que publicar con frecuencia.
+
+**Hallazgo real durante la implementación**: el nombre `worktrees-manager` ya lo usaba el `package.json` raíz del monorepo (privado, nunca publicado). Darle el mismo nombre a `apps/server` (el paquete publicable) generaba una colisión real en pnpm — `pnpm --filter worktrees-manager` pasaba a ser ambiguo y ejecutaba el script del root además del de `apps/server` (comprobado: `pnpm --filter worktrees-manager run typecheck` disparaba un `pnpm -r run typecheck` anidado). Se renombró el paquete raíz a `worktrees-manager-monorepo` (solo interno, sin efecto en la publicación) y se actualizaron las referencias a `--filter server` en `package.json`, `CLAUDE.md` y `apps/server/README.md`.
+
+Dos bugs adicionales expuestos por ser la primera vez que se compilaba `apps/server` de verdad (no relacionados entre sí, corregidos de paso): `tsconfig.json` incluía los `*.test.ts` (y `test-fixtures.ts`) en el build de `dist/`, y ESLint no ignoraba `apps/server/public/` (destino del build copiado del dashboard), disparando miles de falsos positivos al lintar ese bundle minificado como si fuera código fuente propio.
