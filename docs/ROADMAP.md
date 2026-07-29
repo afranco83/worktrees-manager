@@ -218,6 +218,8 @@ Tareas:
 
 **DoD**: a definir.
 
+**Mergeada en `main`**: [PR #8](https://github.com/afranco83/worktrees-manager/pull/8) (2026-07-29), 242 tests backend + 67 tests frontend en verde — cubre las tres tareas marcadas arriba (tema de color, responsive y bloqueo de borrado con cambios sin commitear). La fase sigue abierta: quedan mejoras de UI/UX por identificar antes de cerrarla.
+
 ---
 
 ## Fase 9 — Distribución
