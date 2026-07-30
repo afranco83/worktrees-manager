@@ -6,7 +6,9 @@ const DEFAULT_PORT = 4100;
 const PORT_FLAG_PREFIX = "--port=";
 const PORT_FLAG = "--port";
 
-const portSchema = z.coerce.number().int().positive();
+const MAX_TCP_PORT = 65535;
+
+const portSchema = z.coerce.number().int().positive().max(MAX_TCP_PORT);
 
 /**
  * Resuelve el puerto de arranque del propio dashboard (no confundir con los
@@ -34,5 +36,13 @@ function readPortFlag(argv: string[]): string | undefined {
   }
 
   const flagIndex = argv.indexOf(PORT_FLAG);
-  return flagIndex !== -1 ? argv[flagIndex + 1] : undefined;
+  if (flagIndex === -1) {
+    return undefined;
+  }
+
+  // El flag está presente pero sin valor siguiente: se devuelve "" (no
+  // `undefined`) para que `resolvePort` lo distinga de "sin --port" y lo
+  // rechace como puerto inválido, en vez de caer en silencio al valor de
+  // PORT/DEFAULT_PORT como si el usuario no hubiera pasado el flag.
+  return argv[flagIndex + 1] ?? "";
 }

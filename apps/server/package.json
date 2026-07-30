@@ -32,7 +32,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "pnpm run build:static && tsc -p tsconfig.json",
+    "build": "pnpm run build:static && tsc -p tsconfig.build.json",
     "build:static": "node scripts/copy-dashboard-dist.mjs",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",

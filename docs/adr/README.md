@@ -21,3 +21,4 @@ A diferencia de otros repos propios sobre el mismo modelo documental, aquí no h
 | [0013](./0013-integracion-pull-requests.md)                      | Integración con Pull Requests: endpoint dedicado + `GitHubCli` inyectable, desacoplado del poll de 5s, sin detalle de checks de CI                  |
 | [0014](./0014-sidebar-responsive-y-grids-por-container-query.md) | Sidebar responsive vía panel deslizante (`Sheet`) por debajo de `lg` + grids de listado por container query en vez de breakpoints de viewport       |
 | [0015](./0015-bloqueo-de-borrado-con-cambios-sin-commitear.md)   | Borrar un worktree con cambios sin commitear pasa de "forzable" a bloqueado sin excepción; borrar uno corriendo lo para primero                     |
+| [0016](./0016-distribucion-como-paquete-npm.md)                  | Distribución npm: estáticos del dashboard en el mismo origen, CLI ejecutable con puerto configurable, publicación manual, renombrado del raíz       |

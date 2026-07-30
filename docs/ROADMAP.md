@@ -223,7 +223,7 @@ Tareas:
 
 ## Fase 9 — Distribución
 
-**Objetivo**: instalar y ejecutar la herramienta como paquete npm, publicado en el registro público (nombre `worktrees-manager`, libre en npm a fecha de definición de esta fase).
+**Objetivo**: instalar y ejecutar la herramienta como paquete npm, publicado en el registro público (nombre `worktrees-manager`, libre en npm a fecha de definición de esta fase). Decisiones completas en [ADR-0016](./adr/0016-distribucion-como-paquete-npm.md).
 
 Tareas:
 
@@ -244,3 +244,12 @@ Tareas:
 **Hallazgo real durante la implementación**: el nombre `worktrees-manager` ya lo usaba el `package.json` raíz del monorepo (privado, nunca publicado). Darle el mismo nombre a `apps/server` (el paquete publicable) generaba una colisión real en pnpm — `pnpm --filter worktrees-manager` pasaba a ser ambiguo y ejecutaba el script del root además del de `apps/server` (comprobado: `pnpm --filter worktrees-manager run typecheck` disparaba un `pnpm -r run typecheck` anidado). Se renombró el paquete raíz a `worktrees-manager-monorepo` (solo interno, sin efecto en la publicación) y se actualizaron las referencias a `--filter server` en `package.json`, `CLAUDE.md` y `apps/server/README.md`.
 
 Dos bugs adicionales expuestos por ser la primera vez que se compilaba `apps/server` de verdad (no relacionados entre sí, corregidos de paso): `tsconfig.json` incluía los `*.test.ts` (y `test-fixtures.ts`) en el build de `dist/`, y ESLint no ignoraba `apps/server/public/` (destino del build copiado del dashboard), disparando miles de falsos positivos al lintar ese bundle minificado como si fuera código fuente propio.
+
+**Ronda de revisión sobre la PR #10** (5 agentes genéricos + `react-common:bug-hunter`, con verificación real de cada hallazgo antes de aceptarlo, no solo lectura del diff), 4 hallazgos corregidos:
+
+- **Bug real introducido por el primer fix del párrafo anterior**: excluir `*.test.ts` de `tsconfig.json` también los sacaba de la cobertura de `typecheck` (`tsc --noEmit`, el mismo config que usa el gate de CI) — verificado inyectando un error de tipos real en un test y comprobando que `tsc --noEmit` salía en verde sin detectarlo. Corregido separando el `tsconfig.json` usado por `typecheck` (sin exclusiones, cobertura completa) de un `tsconfig.build.json` nuevo (extiende el anterior, añade la exclusión) usado solo por `build` — mismo patrón que ya usa `apps/dashboard` para separar responsabilidades entre configs.
+- **Falta de ADR para las decisiones de esta fase**: corregido con [ADR-0016](./adr/0016-distribucion-como-paquete-npm.md), sin el cual esta fase rompía sin excepción el patrón seguido desde la Fase 1.
+- **`resolvePort` no acotaba el rango real de un puerto TCP** (`cli-options.ts`): `--port 99999` pasaba la validación de Zod (solo "entero positivo") y el proceso moría con un `RangeError` crudo de Node en `net.Server.listen()` en vez del mensaje de `InvalidPortError` que la feature existe para dar. Corregido añadiendo `.max(65535)` al schema.
+- **`--port` sin valor siguiente caía en silencio al valor por defecto/`PORT`** en vez de avisar de un flag mal formado — un typo del usuario (`--port` al final de la línea, sin número) pasaba desapercibido. Corregido distinguiendo "flag ausente" de "flag presente sin valor" en `readPortFlag`.
+
+Otros hallazgos de la misma ronda (un `console.log` suelto en vez del logger de Fastify, una pequeña duplicación del envelope de error entre `static-assets.ts` y `app.ts`, naming de tests que no sigue "should X when Y") quedaron por debajo del umbral de confianza (&lt;80/100 sobre 100) tras verificación independiente — no se actuó sobre ellos.

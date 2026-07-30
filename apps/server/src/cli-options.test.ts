@@ -41,4 +41,12 @@ describe("resolvePort", () => {
   it("should throw InvalidPortError for a negative port", () => {
     expect(() => resolvePort(["--port", "-1"], {})).toThrow(InvalidPortError);
   });
+
+  it("should throw InvalidPortError for a port above the valid TCP range", () => {
+    expect(() => resolvePort(["--port", "99999"], {})).toThrow(InvalidPortError);
+  });
+
+  it("should throw InvalidPortError when --port is passed without a value", () => {
+    expect(() => resolvePort(["--port"], {})).toThrow(InvalidPortError);
+  });
 });
