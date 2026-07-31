@@ -31,3 +31,5 @@ export class WorktreeProcessAlreadyRunningError extends Error {}
 export class WorktreeProcessNotRunningError extends Error {}
 
 export class DevCommandSpawnError extends Error {}
+
+export class InvalidPortError extends Error {}

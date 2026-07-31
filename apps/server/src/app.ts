@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type Database from "better-sqlite3";
 import Fastify, { type FastifyReply } from "fastify";
 import {
@@ -31,6 +34,7 @@ import {
 import { filesystemPlugin } from "./filesystem/plugin.js";
 import { projectsPlugin } from "./projects/plugin.js";
 import { settingsPlugin } from "./settings/plugin.js";
+import { registerStaticAssets } from "./static-assets.js";
 import { systemGitHubCli, type GitHubCli } from "./worktrees/github-cli.js";
 import { pruneAllWorktreeLogs } from "./worktrees/log-repository.js";
 import {
@@ -66,9 +70,11 @@ function sendErrorResponse({
   reply.code(statusCode).send({ error, message, statusCode });
 }
 
+const defaultPublicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
+
 export function buildApp(
   db: Database.Database,
-  options?: { logger?: boolean; githubCli?: GitHubCli },
+  options?: { logger?: boolean; githubCli?: GitHubCli; publicDir?: string },
 ) {
   const app = Fastify({ logger: options?.logger ?? true }).withTypeProvider<ZodTypeProvider>();
 
@@ -130,6 +136,8 @@ export function buildApp(
   app.register(filesystemPlugin, { prefix: "/api/filesystem/directories" });
   app.register(worktreesPlugin, { prefix: "/api" });
   app.register(settingsPlugin, { prefix: "/api/settings" });
+
+  registerStaticAssets(app, options?.publicDir ?? defaultPublicDir);
 
   app.setErrorHandler((error, request, reply) => {
     if (hasZodFastifySchemaValidationErrors(error)) {

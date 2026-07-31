@@ -1,5 +1,5 @@
 {
-  "name": "worktrees-manager",
+  "name": "worktrees-manager-monorepo",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.8.0",
@@ -7,7 +7,8 @@
     "node": ">=26"
   },
   "scripts": {
-    "dev": "concurrently -n dashboard,server -c blue,green \"pnpm --filter dashboard dev\" \"pnpm --filter server dev\"",
+    "dev": "concurrently -n dashboard,server -c blue,green \"pnpm --filter dashboard dev\" \"pnpm --filter worktrees-manager dev\"",
+    "build": "pnpm --filter dashboard run build && pnpm --filter worktrees-manager run build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r run typecheck",

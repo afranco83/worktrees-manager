@@ -1,16 +1,45 @@
 {
-  "name": "server",
-  "private": true,
-  "version": "0.0.0",
+  "name": "worktrees-manager",
+  "version": "0.1.0",
+  "description": "Dashboard local para gestionar git worktrees: crear/borrar con puerto automático, arrancar/parar su entorno de dev con logs en tiempo real, ver cambios sin commitear y su PR asociada.",
+  "keywords": [
+    "git",
+    "worktree",
+    "worktrees",
+    "dashboard",
+    "dev-tools"
+  ],
+  "license": "MIT",
+  "author": "Aurelio Franco Fernández",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/afranco83/worktrees-manager.git"
+  },
+  "homepage": "https://github.com/afranco83/worktrees-manager#readme",
+  "bugs": {
+    "url": "https://github.com/afranco83/worktrees-manager/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "bin": {
+    "worktrees-manager": "dist/index.js"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm run build:static && tsc -p tsconfig.build.json",
+    "build:static": "node scripts/copy-dashboard-dist.mjs",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.2",
     "better-sqlite3": "^12.4.1",
     "execa": "^9.6.1",
     "fastify": "^5.6.1",
