@@ -1,9 +1,30 @@
-# apps/server
+# worktrees-manager
 
-Backend del Worktrees Manager: Node.js + Fastify + Socket.io. Ver `docs/ARCHITECTURE.md` §3-4 para las convenciones de esta app y `docs/ROADMAP.md` para el estado actual del proyecto.
+Dashboard local para gestionar `git worktrees` de forma visual: crear/borrar worktrees con asignación automática de puerto, arrancar/parar sus entornos de dev con logs en tiempo real, ver su estado de cambios sin commitear y su PR asociada.
 
+## Uso
+
+```bash
+npx worktrees-manager
 ```
-pnpm --filter worktrees-manager dev
+
+o instalado de forma global:
+
+```bash
+npm install -g worktrees-manager
+worktrees-manager
 ```
 
-Al arrancar crea (si no existe) el registro central en `~/.worktrees-manager/registry.db` (SQLite, sin esquema todavía — Fase 2).
+Arranca un servidor local que sirve el dashboard (por defecto en `http://localhost:4100`). Puerto configurable con `--port <n>` o la variable de entorno `PORT`.
+
+Requiere Node.js ≥ 26 y `git`; la integración con Pull Requests necesita además [GitHub CLI](https://cli.github.com/) (`gh`) instalada y autenticada.
+
+## Documentación
+
+Repositorio y documentación completa (arquitectura, roadmap, decisiones de diseño): [github.com/afranco83/worktrees-manager](https://github.com/afranco83/worktrees-manager).
+
+Este paquete es el servidor (`apps/server` del monorepo): Node.js + Fastify + Socket.io, sirve tanto la API como el build del dashboard (`apps/dashboard`) desde el mismo origen.
+
+## Licencia
+
+MIT © Aurelio Franco Fernández
