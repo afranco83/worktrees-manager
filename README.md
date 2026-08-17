@@ -67,6 +67,10 @@ Documentación completa del proyecto:
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — estado y planificación por fases
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas
 
+## Contribuir
+
+`main` está protegida: los cambios llegan siempre a través de una rama + Pull Request, con el check `ci` (lint + typecheck + test) en verde antes de mergear — sin excepción para el propio mantenedor.
+
 ## Licencia
 
 [MIT](LICENSE) © Aurelio Franco Fernández
