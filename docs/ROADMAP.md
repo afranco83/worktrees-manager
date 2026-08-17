@@ -4,7 +4,7 @@ Desglose por fases con tareas y criterios de aceptación (Definition of Done). C
 
 Seguimiento paralelo en Notion: [Worktrees Manager](https://app.notion.com/p/Worktrees-Manager-39b86295722280229481eb3ff5562a9e).
 
-Estado actual: **Fase 9 — Distribución, pendiente de arrancar**; Fase 8 cerrada el 2026-07-29; Fase 7 cerrada el 2026-07-21; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
+Estado actual: **Todas las fases de v1 cerradas** — Fase 9 cerrada el 2026-08-17; Fase 8 cerrada el 2026-07-29; Fase 7 cerrada el 2026-07-21; Fase 6 cerrada el 2026-07-21; Fase 5 cerrada el 2026-07-20; Fase 4 cerrada el 2026-07-16; Fase 3 cerrada el 2026-07-16; Fase 2 cerrada el 2026-07-16; Fase 1 cerrada el 2026-07-16; Fase 0 cerrada el 2026-07-16.
 
 ---
 
@@ -221,7 +221,7 @@ Tareas:
 
 ---
 
-## Fase 9 — Distribución
+## Fase 9 — Distribución _(cerrada — 2026-08-17)_
 
 **Objetivo**: instalar y ejecutar la herramienta como paquete npm, publicado en el registro público (nombre `worktrees-manager`, libre en npm a fecha de definición de esta fase). Decisiones completas en [ADR-0016](./adr/0016-distribucion-como-paquete-npm.md).
 
@@ -230,9 +230,9 @@ Tareas:
 - [x] `apps/server` sirve el build de producción de `apps/dashboard` (`vite build`) como estáticos desde el mismo origen — sustituye al proxy de Vite (`server.proxy["/api"]`) usado en dev. Fallback a `index.html` para rutas cliente de `react-router`, 404 JSON real para `/api/*` sin match.
 - [x] `apps/server` deja de ser `private` y gana un punto de entrada ejecutable (`bin`), con puerto configurable (`--port`/`--port=`, env var `PORT`, por defecto `4100`, validado con Zod) e imprime en consola la URL del dashboard al arrancar — sin auto-abrir el navegador, decisión explícita para no sorprender en entornos remotos/SSH.
 - [x] Verificación real de instalación en un entorno limpio: `npm pack` real + `npm install -g --prefix <aislado>` en un directorio y `$HOME` completamente ajenos al workspace de pnpm (sin hoisting/caché compartida). `better-sqlite3` resolvió su binario prebuilt sin compilar (riesgo de dependencia nativa asumido, sin incidencias); el binario global arrancó, creó el registro en el `$HOME` aislado y sirvió tanto `/health` como el dashboard real.
-- [ ] `npm publish` manual (no automatizado en CI por ahora) de la versión inicial `0.1.0`.
+- [x] `npm publish` manual (no automatizado en CI por ahora) de la versión inicial `0.1.0`.
 
-**DoD**: `npx worktrees-manager` (probado en un entorno limpio, sin el repo clonado) instala, arranca el servidor y sirve el dashboard funcional en `localhost:PUERTO` desde el paquete publicado en el registro público de npm; `npm i -g worktrees-manager` igual. Sin auto-arranque como servicio de sistema (launchd/systemd) — explícitamente fuera de alcance de v1 (`docs/PROJECT_SPECIFICATION.md` §4).
+**DoD**: `npx worktrees-manager` (probado en un entorno limpio, sin el repo clonado) instala, arranca el servidor y sirve el dashboard funcional en `localhost:PUERTO` desde el paquete publicado en el registro público de npm; `npm i -g worktrees-manager` igual. Sin auto-arranque como servicio de sistema (launchd/systemd) — explícitamente fuera de alcance de v1 (`docs/PROJECT_SPECIFICATION.md` §4). **Cumplido**: [`worktrees-manager@0.1.0`](https://www.npmjs.com/package/worktrees-manager) publicado el 2026-08-17. Antes de publicar: `pnpm install --frozen-lockfile` + lint + typecheck + test (255 backend + 67 frontend) + build en verde desde cero, y `npm pack`/`npm install -g --prefix` en un `$HOME` y prefix completamente aislados (repitiendo la verificación previa a la publicación, ya con los README nuevos incluidos en el tarball). Tras publicar, verificación adicional contra el paquete real ya en el registro (no solo el tarball local): `npx worktrees-manager@0.1.0` en un `$HOME` aislado sirvió `/health` y el dashboard correctamente.
 
 **Decisiones tomadas al definir esta fase (2026-07-29)**:
 
@@ -253,3 +253,9 @@ Dos bugs adicionales expuestos por ser la primera vez que se compilaba `apps/ser
 - **`--port` sin valor siguiente caía en silencio al valor por defecto/`PORT`** en vez de avisar de un flag mal formado — un typo del usuario (`--port` al final de la línea, sin número) pasaba desapercibido. Corregido distinguiendo "flag ausente" de "flag presente sin valor" en `readPortFlag`.
 
 Otros hallazgos de la misma ronda (un `console.log` suelto en vez del logger de Fastify, una pequeña duplicación del envelope de error entre `static-assets.ts` y `app.ts`, naming de tests que no sigue "should X when Y") quedaron por debajo del umbral de confianza (&lt;80/100 sobre 100) tras verificación independiente — no se actuó sobre ellos.
+
+**Cierre de la fase (2026-08-17)**: antes de publicar se detectó que el `README.md` raíz del repo no existía y que `apps/server/README.md` (la raíz del paquete tal y como se publica, la que muestra npmjs.com) seguía describiendo el estado previo a la propia Fase 9 — se escribieron ambos (commit directo a `main`, sin rama/PR por tratarse solo de documentación) antes de publicar.
+
+Publicación real de `worktrees-manager@0.1.0`, hecha por el usuario vía `npm publish --otp=...`: la cuenta de npm tiene 2FA por **llave de seguridad** (WebAuthn), no por app TOTP, así que el flag `--otp` no aplicaba — hubo que usar el flujo alternativo de npm (URL de verificación web que imprime `npm publish` cuando detecta 2FA por llave, en vez de pedir un código) ejecutado desde una terminal normal fuera de Claude Code, porque la salida capturada en el chat redacta cualquier URL con pinta de token.
+
+Verificación de instalación en limpio repetida (mismo patrón que al implementar la fase, ya con los README nuevos) más una verificación adicional contra el paquete **ya publicado**: `npx worktrees-manager@0.1.0` en un `$HOME` aislado. Primer intento fallido con "command not found" — la causa real fue ejecutar `npx` desde dentro de `apps/server`, cuyo propio `package.json` se llama también `worktrees-manager`; `npm exec` lo interpreta como ya resuelto localmente y no llega a instalar el paquete remoto. Repetido desde un directorio fuera del monorepo, funcionó correctamente. De paso se encontró y se detuvo un proceso `worktrees-manager` huérfano, corriendo desde hacía 18 días, sobrante de la propia verificación en limpio hecha al implementar la fase.
