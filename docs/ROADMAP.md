@@ -311,7 +311,7 @@ Verificación de instalación en limpio repetida (mismo patrón que al implement
 
 ---
 
-## Tarea — Publicación a npm vía Trusted Publishing (OIDC) _(en curso — 2026-08-24)_
+## Tarea — Publicación a npm vía Trusted Publishing (OIDC) _(cerrada — 2026-08-24)_
 
 **Objetivo**: corregir el fallo de publicación de `1.0.0` de la tarea anterior sustituyendo `NPM_TOKEN` por npm Trusted Publishing (OIDC), el mecanismo que el propio npm recomienda ahora en vez de tokens de larga vida para CI. Documentado en [ADR-0019](./adr/0019-publish-npm-via-trusted-publishing.md) — corrige un único aspecto de [ADR-0017](./adr/0017-automatizacion-release-y-publicacion-npm.md), el resto de esa decisión sigue vigente.
 
@@ -319,6 +319,7 @@ Verificación de instalación en limpio repetida (mismo patrón que al implement
 
 - [x] `release-please.yml`: quitado `NODE_AUTH_TOKEN`/`NPM_TOKEN` del paso `npm publish --provenance` (se mantiene `permissions: id-token: write`, ya presente para el provenance).
 - [x] Añadido trigger `workflow_dispatch` (input `tag`) para poder reintentar solo el job `publish` contra un tag ya creado, sin depender de que `release-please` genere una Release PR nueva — mecanismo genérico de recuperación, no solo para este incidente.
-- [x] Pendiente del usuario, fuera del alcance de Claude Code: configurar el Trusted Publisher en npmjs.com (`worktrees-manager` → Settings → Publishing access → GitHub Actions, owner `afranco83`, repo `worktrees-manager`, workflow `release-please.yml`).
-- [ ] Reintento real de publicación de `1.0.0` vía `workflow_dispatch` una vez configurado el Trusted Publisher — confirmar en `npm view worktrees-manager versions` que `1.0.0` aparece.
-- [ ] Borrado opcional del secret `NPM_TOKEN`, ya sin uso.
+- [x] Trusted Publisher configurado por el usuario en npmjs.com (`worktrees-manager` → Settings → Publishing access → GitHub Actions, owner `afranco83`, repo `worktrees-manager`, workflow `release-please.yml`).
+- [x] Reintento real vía `workflow_dispatch(tag=v1.0.0)`: publish en verde sin `EOTP`, provenance firmado y publicado en el transparency log de Sigstore. `worktrees-manager@1.0.0` confirmado en el registro público (`npm view worktrees-manager versions` → incluye `1.0.0`, `dist-tags.latest = 1.0.0`), con `gitHead` (`c4bbd17...`) coincidiendo con el commit real de la merge de la Release PR #17.
+
+**Pendiente, opcional, fuera de esta tarea**: borrar el secret `NPM_TOKEN` del repo (`Settings → Secrets and variables → Actions`) — ya sin ningún uso en el workflow.
