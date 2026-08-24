@@ -1,6 +1,6 @@
 {
   "name": "worktrees-manager",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Dashboard local para gestionar git worktrees: crear/borrar con puerto automático, arrancar/parar su entorno de dev con logs en tiempo real, ver cambios sin commitear y su PR asociada.",
   "keywords": [
     "git",
