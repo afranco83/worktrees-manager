@@ -306,3 +306,19 @@ Verificación de instalación en limpio repetida (mismo patrón que al implement
 - [x] `release-please-config.json`/`.release-please-manifest.json` sin tocar — `Release-As` es un override puntual, no un cambio de configuración permanente.
 
 **Pendiente, fuera de esta tarea**: la publicación real de `1.0.0` sigue siendo un paso deliberado y posterior — mergear la Release PR que `release-please` actualice tras este commit, cuando el usuario decida.
+
+**Publicación real y fallo encontrado (2026-08-24)**: mergeada la Release PR (`chore(main): release 1.0.0`, [#17](https://github.com/afranco83/worktrees-manager/pull/17)) — `release-please` creó correctamente el tag `v1.0.0` y la GitHub Release, pero el job `publish` falló en `npm publish --provenance` con `EOTP`: npm está deprecando que un token pueda saltarse el 2FA al publicar desde CI, con independencia del tipo de token. `1.0.0` no llegó a publicarse en el registro (npm no publica nada parcial), pero la GitHub Release quedó desincronizada de lo realmente publicado hasta resolver la siguiente tarea.
+
+---
+
+## Tarea — Publicación a npm vía Trusted Publishing (OIDC) _(en curso — 2026-08-24)_
+
+**Objetivo**: corregir el fallo de publicación de `1.0.0` de la tarea anterior sustituyendo `NPM_TOKEN` por npm Trusted Publishing (OIDC), el mecanismo que el propio npm recomienda ahora en vez de tokens de larga vida para CI. Documentado en [ADR-0019](./adr/0019-publish-npm-via-trusted-publishing.md) — corrige un único aspecto de [ADR-0017](./adr/0017-automatizacion-release-y-publicacion-npm.md), el resto de esa decisión sigue vigente.
+
+**Hecho**:
+
+- [x] `release-please.yml`: quitado `NODE_AUTH_TOKEN`/`NPM_TOKEN` del paso `npm publish --provenance` (se mantiene `permissions: id-token: write`, ya presente para el provenance).
+- [x] Añadido trigger `workflow_dispatch` (input `tag`) para poder reintentar solo el job `publish` contra un tag ya creado, sin depender de que `release-please` genere una Release PR nueva — mecanismo genérico de recuperación, no solo para este incidente.
+- [x] Pendiente del usuario, fuera del alcance de Claude Code: configurar el Trusted Publisher en npmjs.com (`worktrees-manager` → Settings → Publishing access → GitHub Actions, owner `afranco83`, repo `worktrees-manager`, workflow `release-please.yml`).
+- [ ] Reintento real de publicación de `1.0.0` vía `workflow_dispatch` una vez configurado el Trusted Publisher — confirmar en `npm view worktrees-manager versions` que `1.0.0` aparece.
+- [ ] Borrado opcional del secret `NPM_TOKEN`, ya sin uso.
