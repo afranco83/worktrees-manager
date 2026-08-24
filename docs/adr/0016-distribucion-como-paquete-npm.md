@@ -1,6 +1,6 @@
 # 0016. Distribución como paquete npm: estáticos en el mismo origen, CLI ejecutable, publicación manual
 
-- **Estado**: Aceptada
+- **Estado**: Superseded by [ADR-0017](./0017-automatizacion-release-y-publicacion-npm.md)
 - **Fecha**: 2026-07-29
 
 ## Contexto

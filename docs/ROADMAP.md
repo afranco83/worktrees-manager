@@ -277,3 +277,17 @@ Verificación de instalación en limpio repetida (mismo patrón que al implement
   - **Resultado**: 0 alertas abiertas en Dependabot tras las 2 PRs (`gh api .../dependabot/alerts` con `state=open` vacío).
 
 **Decisión explícita del usuario, sin ADR** (no es una decisión de arquitectura del producto, sino de higiene operativa del repositorio) — si se revisita en el futuro (p. ej. añadir un segundo colaborador con revisión obligatoria), documentarlo aquí mismo o en un ADR si implica cambiar el mecanismo (branch protection clásica vs. ruleset, por ejemplo).
+
+---
+
+## Tarea — Automatización de release y publicación a npm _(cerrada — 2026-08-24)_
+
+**Objetivo**: con el paquete `worktrees-manager` ya publicado manualmente en la Fase 9 ([ADR-0016](./adr/0016-distribucion-como-paquete-npm.md)) y el ruleset `protect-main` ya activo sin bypass ni para el owner (tarea de endurecimiento de seguridad, arriba), automatizar el ciclo versión→changelog→publicación sin comprometer esa protección. No es continuación de ninguna fase — trabajo nuevo, sin fase asignada, documentado como tarea propia según el criterio fijado al cerrar la Fase 9.
+
+**Hecho**:
+
+- [x] Retagueado retroactivo de la versión ya publicada: `v0.1.0` en el commit exacto que npm registró como `gitHead` de esa publicación (`c67ad007b...`), empujado a origin — hasta ahora no existía ningún tag git para una versión ya real en el registro.
+- [x] `release-please` en modo manifest, scoped al path `apps/server` (`release-please-config.json` + `.release-please-manifest.json`), ver [ADR-0017](./adr/0017-automatizacion-release-y-publicacion-npm.md) — descarta `semantic-release` explícitamente por necesitar push directo a `main`, incompatible con el ruleset sin bypass.
+- [x] Workflow `release-please.yml`: job `release-please` (abre/actualiza la Release PR, usando un PAT dedicado en vez del `GITHUB_TOKEN` por defecto, necesario para que la Release PR dispare `ci.yml` bajo el ruleset) + job `publish` encadenado (checkout del tag, build de raíz, test, `npm publish --provenance`).
+- [x] Documentación actualizada: ADR-0016 marcado `Superseded by` ADR-0017 (sin tocar el resto de su contenido), `docs/ARCHITECTURE.md` §1/§3.
+- [x] Pendiente del usuario, fuera del alcance de Claude Code: crear los secrets `NPM_TOKEN` (automation token de npmjs.com) y `RELEASE_PLEASE_TOKEN` (PAT fine-grained scoped al repo, con expiración — requiere rotación manual periódica) en `Settings → Secrets and variables → Actions`.
