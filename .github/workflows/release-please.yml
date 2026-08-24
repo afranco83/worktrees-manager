@@ -3,12 +3,19 @@ name: release-please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag ya creado a (re)publicar, p. ej. v1.0.0 -- solo para reintentar un publish que falló"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,7 +33,10 @@ jobs:
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: |
+      always() &&
+      ((github.event_name == 'push' && needs.release-please.outputs.release_created == 'true') ||
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
 
       - uses: pnpm/action-setup@v4
 
@@ -48,8 +58,10 @@ jobs:
       - run: pnpm run build
       - run: pnpm test
 
+      # npm Trusted Publishing (OIDC): sin NODE_AUTH_TOKEN. El paquete debe tener
+      # este repo+workflow configurado como Trusted Publisher en npmjs.com --
+      # ver ADR-0019. npm >=11.5.1 (aquí 11.19.0) resuelve el intercambio OIDC
+      # solo con el permiso id-token: write, sin ningún secret.
       - name: Publish to npm
         working-directory: apps/server
         run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
