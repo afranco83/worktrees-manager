@@ -291,3 +291,18 @@ Verificación de instalación en limpio repetida (mismo patrón que al implement
 - [x] Workflow `release-please.yml`: job `release-please` (abre/actualiza la Release PR, usando un PAT dedicado en vez del `GITHUB_TOKEN` por defecto, necesario para que la Release PR dispare `ci.yml` bajo el ruleset) + job `publish` encadenado (checkout del tag, build de raíz, test, `npm publish --provenance`).
 - [x] Documentación actualizada: ADR-0016 marcado `Superseded by` ADR-0017 (sin tocar el resto de su contenido), `docs/ARCHITECTURE.md` §1/§3.
 - [x] Pendiente del usuario, fuera del alcance de Claude Code: crear los secrets `NPM_TOKEN` (automation token de npmjs.com) y `RELEASE_PLEASE_TOKEN` (PAT fine-grained scoped al repo, con expiración — requiere rotación manual periódica) en `Settings → Secrets and variables → Actions`.
+
+**Verificación del circuito completo (2026-08-24)**: con los dos secrets ya creados, se probó con un `fix:` real ([PR #16](https://github.com/afranco83/worktrees-manager/pull/16) — el tarball publicado de `0.1.0` no incluía el fichero `LICENSE` pese a declarar `"license": "MIT"`, corregido copiándolo a `apps/server/LICENSE`). Tras mergearlo, `release-please` abrió correctamente una Release PR (`chore(main): release 0.1.1`) con el bump, el `CHANGELOG.md` inicial y el tag `v0.1.1` propuestos — confirmando que el job `release-please` corre, calcula bien la versión (`bump-minor-pre-major` funcionando como se esperaba) y que el job `publish` queda `skipped` hasta que esa PR se mergee de verdad. No se mergeó esa Release PR de prueba — el salto de versión real se decide aparte, ver siguiente tarea.
+
+---
+
+## Tarea — Salto deliberado a la versión 1.0.0 _(cerrada — 2026-08-24)_
+
+**Objetivo**: con todas las fases de v1 del producto cerradas y el paquete en uso real desde la Fase 9, dejar de estar indefinidamente en `0.1.x` — con la automatización de la tarea anterior, el proyecto nunca cruzaría a `1.0.0` por sí solo (mientras el major sea `0`, ni un `BREAKING CHANGE` lo sube, solo el minor). Decisión de comunicación semántica del usuario, preparada vía el mecanismo `Release-As` de `release-please`, documentada en [ADR-0018](./adr/0018-salto-a-version-1-0-0.md). No es continuación de ninguna fase.
+
+**Hecho**:
+
+- [x] Commit `docs: prepara el salto a la versión 1.0.0` con footer `Release-As: 1.0.0`, incluyendo también un cambio real dentro de `apps/server/` (sección "Versionado" en `apps/server/README.md`) para que el commit cuente en el _path-scoping_ del componente y el override no se pierda.
+- [x] `release-please-config.json`/`.release-please-manifest.json` sin tocar — `Release-As` es un override puntual, no un cambio de configuración permanente.
+
+**Pendiente, fuera de esta tarea**: la publicación real de `1.0.0` sigue siendo un paso deliberado y posterior — mergear la Release PR que `release-please` actualice tras este commit, cuando el usuario decida.
