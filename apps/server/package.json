@@ -46,7 +46,7 @@
     "fastify-type-provider-zod": "^7.0.0",
     "socket.io": "^4.8.1",
     "tree-kill": "^1.2.2",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",
